@@ -12,4 +12,4 @@ cmds = [
 ]
 
 [start]
-cmd = 'cd backend && node src/app.js'
+cmd = 'sh -c "cd /app/backend && exec node src/app.js"'

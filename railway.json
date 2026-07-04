@@ -4,7 +4,6 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "cd backend && node src/app.js",
     "healthcheckPath": "/api/status",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
