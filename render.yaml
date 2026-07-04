@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: waai-flow
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm run render:build
+    startCommand: npm run render:start
+    healthCheckPath: /api/status
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        value: file:./dev.db
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TOKEN_TTL_MS
+        value: 86400000
+      - key: PROJECT_OWNER_NAME
+        value: ZQ Developers
+      - key: PROJECT_SUPPORT_WHATSAPP
+        value: "+923144916432"

@@ -139,6 +139,32 @@ docker compose up --build
 
 Before using Docker publicly, configure environment variables and persistent volumes for database, sessions, and uploads.
 
+## Deploy On Render
+
+This repo includes `render.yaml` for a one-service Render deploy. The backend serves the API and the built React dashboard from the same public URL.
+
+1. Push this repository to GitHub.
+2. Open Render Dashboard and choose **New** -> **Blueprint**.
+3. Connect `zqdevelopers/waai-flow`.
+4. Select the `main` branch and apply the detected `render.yaml`.
+5. Add secret values when Render asks:
+
+```env
+ADMIN_USERNAME=your-admin-user
+ADMIN_PASSWORD=your-strong-password
+```
+
+Render will run:
+
+```bash
+npm run render:build
+npm run render:start
+```
+
+After deploy, open the Render URL and log in with your admin credentials.
+
+Free Render services can run WAAI Flow for demos, but their local filesystem is not durable. That means SQLite data, uploaded files, and WhatsApp session files can be lost after restarts or redeploys. For a real public instance, use a paid Render service with a persistent disk and set `DATA_DIR` to the disk mount path, or migrate the app database to a managed database.
+
 ## GitHub Upload Checklist
 
 Before pushing:

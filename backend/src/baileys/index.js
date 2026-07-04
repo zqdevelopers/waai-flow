@@ -37,6 +37,7 @@ import { prisma } from '../database/index.js';
 import qrcode from 'qrcode-terminal';
 import path from 'path';
 import fs from 'fs';
+import { dataPath } from '../paths.js';
 
 class BaileysService {
   constructor() {
@@ -66,7 +67,7 @@ class BaileysService {
       return this.sessions.get(sessionId);
     }
 
-    const sessionDir = path.join(process.cwd(), 'sessions', sessionId);
+    const sessionDir = dataPath('sessions', sessionId);
     if (!fs.existsSync(sessionDir)) {
       fs.mkdirSync(sessionDir, { recursive: true });
     }

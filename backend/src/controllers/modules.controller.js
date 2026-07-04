@@ -4,8 +4,9 @@ import crypto from 'crypto';
 import { prisma } from '../database/index.js';
 import { logger, logBuffer } from '../app.js';
 import { baileyService } from '../baileys/index.js';
+import { dataPath } from '../paths.js';
 
-const uploadDir = path.join(process.cwd(), 'uploads');
+const uploadDir = dataPath('uploads');
 const envPath = path.join(process.cwd(), '.env');
 
 const parseJson = (value, fallback) => {

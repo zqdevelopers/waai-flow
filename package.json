@@ -13,6 +13,8 @@
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
     "build": "npm run build --prefix frontend",
+    "render:build": "npm ci --prefix backend && npm ci --prefix frontend && npm run prisma:generate --prefix backend && npm run db:push --prefix backend && npm run build --prefix frontend",
+    "render:start": "npm start --prefix backend",
     "verify": "npm run build",
     "start": "pm2 start ecosystem.config.cjs",
     "stop": "pm2 stop ecosystem.config.cjs",
