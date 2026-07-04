@@ -30,7 +30,7 @@ jobs:
         run: npm ci --prefix frontend
 
       - name: Generate Prisma client
-        run: npx prisma generate --schema backend/prisma/schema.prisma
+        run: npm run prisma:generate --prefix backend
 
       - name: Check backend syntax
         run: find backend/src -name "*.js" -print0 | xargs -0 -n1 node --check
