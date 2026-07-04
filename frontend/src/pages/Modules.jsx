@@ -105,13 +105,28 @@ const useSessions = () => {
   return sessions;
 };
 
+const BLANK_AGENT = { name: '', description: '', provider: 'openai', model: 'gpt-4o', systemPrompt: 'You are a helpful WhatsApp assistant.', temperature: 0.7 };
+
 export const AgentsPage = () => {
   const { data: agents, loading, error, load } = useResource('/modules/agents');
-  const [form, setForm] = useState({ name: '', description: '', provider: 'openai', model: 'gpt-4o', systemPrompt: 'You are a helpful WhatsApp assistant.', temperature: 0.7 });
+  const [form, setForm] = useState(BLANK_AGENT);
+  const [editId, setEditId] = useState(null);
+
+  const startEdit = (agent) => {
+    setEditId(agent.id);
+    setForm({ name: agent.name, description: agent.description || '', provider: agent.provider, model: agent.model, systemPrompt: agent.systemPrompt, temperature: agent.temperature });
+  };
+
+  const cancelEdit = () => { setEditId(null); setForm(BLANK_AGENT); };
 
   const save = async () => {
-    await api.post('/modules/agents', form);
-    setForm({ ...form, name: '', description: '' });
+    if (editId) {
+      await api.put(`/modules/agents/${editId}`, form);
+      setEditId(null); setForm(BLANK_AGENT);
+    } else {
+      await api.post('/modules/agents', form);
+      setForm(BLANK_AGENT);
+    }
     load();
   };
 
@@ -121,6 +136,7 @@ export const AgentsPage = () => {
   };
 
   const remove = async (agent) => {
+    if (!window.confirm(`Delete agent "${agent.name}"?`)) return;
     await api.delete(`/modules/agents/${agent.id}`);
     load();
   };
@@ -128,7 +144,7 @@ export const AgentsPage = () => {
   return (
     <Page title="AI Agents" description="Create reusable agent profiles for AI-powered WhatsApp flows." icon={Bot}>
       <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
-        <Panel title="Create Agent">
+        <Panel title={editId ? 'Edit Agent' : 'Create Agent'}>
           <div className="space-y-3">
             <Input placeholder="Agent name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <Input placeholder="Short description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -141,8 +157,12 @@ export const AgentsPage = () => {
               <Input placeholder="Model" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
             </div>
             <Textarea rows={5} placeholder="System prompt" value={form.systemPrompt} onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })} />
-            <Input type="number" min="0" max="2" step="0.1" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} />
-            <Button onClick={save} disabled={!form.name}><Plus size={16} /> Create Agent</Button>
+            <label className="block text-xs text-slate-400">Temperature: {form.temperature}</label>
+            <Input type="range" min="0" max="2" step="0.1" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: parseFloat(e.target.value) })} />
+            <div className="flex gap-2">
+              <Button onClick={save} disabled={!form.name}>{editId ? <><Save size={16} /> Update</> : <><Plus size={16} /> Create Agent</>}</Button>
+              {editId && <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>}
+            </div>
           </div>
         </Panel>
         <Panel title="Agents">
@@ -150,7 +170,7 @@ export const AgentsPage = () => {
           {loading ? <Empty text="Loading agents..." /> : agents.length === 0 ? <Empty /> : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {agents.map((agent) => (
-                <div key={agent.id} className="bg-background border border-border rounded-lg p-4">
+                <div key={agent.id} className={`bg-background border rounded-lg p-4 transition ${editId === agent.id ? 'border-primary/50' : 'border-border'}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-white font-semibold">{agent.name}</h3>
@@ -158,8 +178,9 @@ export const AgentsPage = () => {
                     </div>
                     <StatusPill status={agent.isActive ? 'active' : 'disabled'} />
                   </div>
-                  <div className="text-xs text-slate-500 mt-4">{agent.provider} / {agent.model} / temp {agent.temperature}</div>
+                  <div className="text-xs text-slate-500 mt-3">{agent.provider} / {agent.model} / temp {agent.temperature}</div>
                   <div className="flex gap-2 mt-4">
+                    <Button variant="secondary" onClick={() => startEdit(agent)}><Save size={14} /> Edit</Button>
                     <Button variant="secondary" onClick={() => toggle(agent)}><Power size={14} /> Toggle</Button>
                     <Button variant="danger" onClick={() => remove(agent)}><Trash2 size={14} /> Delete</Button>
                   </div>
@@ -608,11 +629,12 @@ const API_CATEGORIES = [
   {
     title: 'Sessions',
     endpoints: [
-      { method: 'GET',    route: '/api/session',            description: 'List WhatsApp sessions' },
-      { method: 'POST',   route: '/api/session',            description: 'Create a new session', request: '{ "name": "My Phone", "sessionId": "mysession" }' },
-      { method: 'GET',    route: '/api/session/:id/qr',     description: 'Get current QR code for a session' },
-      { method: 'DELETE', route: '/api/session/:id',        description: 'Delete and disconnect a session' },
-      { method: 'POST',   route: '/api/session/:id/logout', description: 'Logout a session without deleting it' },
+      { method: 'GET',    route: '/api/session',                  description: 'List all WhatsApp sessions' },
+      { method: 'GET',    route: '/api/session/:id',              description: 'Get a single session by ID' },
+      { method: 'POST',   route: '/api/session/create',           description: 'Create and connect a new session', request: '{ "name": "My Phone", "sessionId": "my-phone" }' },
+      { method: 'POST',   route: '/api/session/:id/reconnect',    description: 'Reconnect a disconnected session', response: '{ "success": true, "status": "CONNECTING" }' },
+      { method: 'DELETE', route: '/api/session/:id',              description: 'Delete and disconnect a session' },
+      { method: 'POST',   route: '/api/session/send',             description: 'Send a message via a session', request: '{ "sessionId": "my-phone", "to": "923...@s.whatsapp.net", "text": "Hello" }' },
     ]
   },
   {

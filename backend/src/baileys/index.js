@@ -556,6 +556,7 @@ class BaileysService {
         if (!hasTrigger) continue;
         flowEngine.execute(flow, {
           sender: remoteJid,
+          message: text,
           text,
           messageId: msg.key.id,
           sessionId

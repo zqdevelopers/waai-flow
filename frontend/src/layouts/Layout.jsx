@@ -56,7 +56,7 @@ const Sidebar = () => {
         {/* Main Menu */}
         <div className="space-y-1">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" to="/" active={path === '/'} />
-          <SidebarItem icon={Phone} label="WhatsApp Sessions" to="/sessions" active={path === '/sessions'} badge="1" />
+          <SidebarItem icon={Phone} label="WhatsApp Sessions" to="/sessions" active={path === '/sessions'} />
           <SidebarItem icon={GitBranch} label="Flow Builder" to="/flows" active={path === '/flows'} />
           <SidebarItem icon={Bot} label="AI Agents" to="/agents" active={path === '/agents'} />
           <SidebarItem icon={Play} label="Executions" to="/executions" active={path === '/executions'} />

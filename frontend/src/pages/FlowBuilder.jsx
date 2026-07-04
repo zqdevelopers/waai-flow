@@ -171,7 +171,9 @@ const FlowBuilder = () => {
   const [flowSessionId, setFlowSessionId] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [testVars, setTestVars] = useState('{\n  "sender": "923001234567@s.whatsapp.net",\n  "message": "Hello"\n}');
+  const [flowIsActive, setFlowIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [running, setRunning] = useState(false);
   const [execLogs, setExecLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
@@ -194,8 +196,8 @@ const FlowBuilder = () => {
   );
 
   const saveFlow = async () => {
-    setSaving(true);
-    const payload = { name: flowName, nodes: JSON.stringify(nodes), edges: JSON.stringify(edges), isActive: true, sessionId: flowSessionId || null };
+    setSaving(true); setSaveError('');
+    const payload = { name: flowName, nodes: JSON.stringify(nodes), edges: JSON.stringify(edges), isActive: flowIsActive, sessionId: flowSessionId || null };
     try {
       if (currentFlowId) {
         await api.put(`/flows/${currentFlowId}`, payload);
@@ -206,13 +208,14 @@ const FlowBuilder = () => {
       const res = await api.get('/flows');
       setFlows(res.data);
     } catch (err) {
-      alert(err.response?.data?.error || 'Error saving flow');
+      setSaveError(err.response?.data?.error || 'Error saving flow');
     } finally { setSaving(false); }
   };
 
   const loadFlow = (flow) => {
     setCurrentFlowId(flow.id);
     setFlowName(flow.name);
+    setFlowIsActive(flow.isActive !== false);
     setFlowSessionId(flow.sessionId || '');
     const parsed = parseJson(flow.nodes, INIT_NODES).map(n => ({
       ...n, type: n.data?.pluginType || n.type || 'default'
@@ -225,15 +228,15 @@ const FlowBuilder = () => {
   };
 
   const createNewFlow = () => {
-    setCurrentFlowId(null); setFlowName('New Flow'); setFlowSessionId('');
+    setCurrentFlowId(null); setFlowName('New Flow'); setFlowSessionId(''); setFlowIsActive(true);
     setNodes(INIT_NODES); setEdges(INIT_EDGES);
-    setSelectedId(null); setExecLogs([]); setShowLogs(false);
+    setSelectedId(null); setExecLogs([]); setShowLogs(false); setSaveError('');
   };
 
   const runFlow = async () => {
-    if (!currentFlowId) { alert('Save the flow first!'); return; }
+    if (!currentFlowId) { setSaveError('Save the flow first before running.'); return; }
     let vars = {};
-    try { vars = JSON.parse(testVars || '{}'); } catch { alert('Test Variables JSON is invalid'); return; }
+    try { vars = JSON.parse(testVars || '{}'); } catch { setSaveError('Test Variables JSON is invalid'); return; }
 
     setRunning(true); setExecLogs([]); setShowLogs(true);
 
@@ -341,7 +344,34 @@ const FlowBuilder = () => {
           <>
             {sel('Session', 'sessionId', [['', 'Use flow session'], ...sessions.map(s => [s.sessionId, `${s.name} (${s.status})`])])}
             {field('Recipient JID', 'to', { placeholder: '{{sender}} or 923...@s.whatsapp.net' })}
-            {ta('Message Text', 'text', 4, { placeholder: 'Hello {{sender}}!\n\nAI reply: {{aiResponse}}' })}
+            {sel('Message Type', 'messageType', [
+              ['text', 'Text'],
+              ['buttons', 'Quick Reply Buttons'],
+              ['list', 'Interactive List'],
+              ['image', 'Image'],
+              ['video', 'Video'],
+              ['audio', 'Audio'],
+              ['document', 'Document'],
+            ])}
+            {ta('Message Text / Caption', 'text', 3, { placeholder: 'Hello {{sender}}!\n\nAI reply: {{aiResponse}}' })}
+            {(d.messageType === 'buttons') && (
+              <>
+                {field('Title (optional)', 'title', { placeholder: 'Choose an option' })}
+                {ta('Buttons JSON', 'buttonsJson', 4, { placeholder: '[{"id":"1","text":"Yes"},{"id":"2","text":"No"}]' })}
+                {field('Footer (optional)', 'footer', { placeholder: 'Powered by WAAI' })}
+              </>
+            )}
+            {(d.messageType === 'list') && (
+              <>
+                {field('Button Label', 'buttonText', { placeholder: 'Open Menu' })}
+                {field('Title', 'title', { placeholder: 'Main Menu' })}
+                {ta('Sections JSON', 'sectionsJson', 5, { placeholder: '[{"title":"Options","rows":[{"id":"1","title":"Option 1","description":""}]}]' })}
+                {field('Footer (optional)', 'footer', { placeholder: 'Powered by WAAI' })}
+              </>
+            )}
+            {(['image','video','audio','document'].includes(d.messageType)) && (
+              field('Media URL', 'mediaUrl', { placeholder: 'https://example.com/file.jpg' })
+            )}
             {hint('Supports all template variables: {{sender}}, {{message}}, {{aiResponse}}, {{httpResponse}}, etc.')}
           </>
         );
@@ -557,19 +587,31 @@ const FlowBuilder = () => {
             </Panel>
 
             {/* Top-right: actions */}
-            <Panel position="top-right" className="flex gap-2 m-4">
-              <button onClick={() => setShowLogs(v => !v)}
-                className="bg-surface border border-border text-slate-400 px-3 py-1.5 rounded-lg hover:text-white transition text-sm">
-                Logs {execLogs.length > 0 && <span className="ml-1 bg-primary/20 text-primary text-[10px] rounded px-1">{execLogs.length}</span>}
-              </button>
-              <button onClick={saveFlow} disabled={saving}
-                className="bg-surface border border-border text-slate-300 px-3 py-1.5 rounded-lg hover:text-white transition flex items-center gap-1.5 text-sm">
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
-              </button>
-              <button onClick={runFlow} disabled={running}
-                className="bg-success text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600 transition flex items-center gap-1.5 text-sm disabled:opacity-60">
-                {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Test Run
-              </button>
+            <Panel position="top-right" className="flex flex-col items-end gap-2 m-4">
+              <div className="flex gap-2">
+                <button onClick={() => setFlowIsActive(v => !v)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition ${flowIsActive ? 'bg-success/15 border-success/40 text-success' : 'bg-surface border-border text-slate-500 hover:text-white'}`}>
+                  {flowIsActive ? '● ACTIVE' : '○ DRAFT'}
+                </button>
+                <button onClick={() => setShowLogs(v => !v)}
+                  className="bg-surface border border-border text-slate-400 px-3 py-1.5 rounded-lg hover:text-white transition text-sm">
+                  Logs {execLogs.length > 0 && <span className="ml-1 bg-primary/20 text-primary text-[10px] rounded px-1">{execLogs.length}</span>}
+                </button>
+                <button onClick={saveFlow} disabled={saving}
+                  className="bg-surface border border-border text-slate-300 px-3 py-1.5 rounded-lg hover:text-white transition flex items-center gap-1.5 text-sm">
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save
+                </button>
+                <button onClick={runFlow} disabled={running}
+                  className="bg-success text-white px-3 py-1.5 rounded-lg hover:bg-emerald-600 transition flex items-center gap-1.5 text-sm disabled:opacity-60">
+                  {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Test Run
+                </button>
+              </div>
+              {saveError && (
+                <div className="bg-danger/10 border border-danger/30 text-danger text-xs rounded-lg px-3 py-1.5 flex items-center gap-2">
+                  {saveError}
+                  <button onClick={() => setSaveError('')} className="ml-1 opacity-60 hover:opacity-100">✕</button>
+                </div>
+              )}
             </Panel>
 
             <Controls className="bg-surface border-border [&>button]:border-border [&>button]:bg-surface [&>button]:fill-slate-400 [&>button:hover]:bg-background" />
