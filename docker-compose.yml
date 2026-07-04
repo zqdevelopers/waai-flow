@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/sessions:/app/sessions
+      - ./backend/uploads:/app/uploads
+      - ./backend/prisma/dev.db:/app/prisma/dev.db
+    environment:
+      - PORT=3000
+      - DATABASE_URL=file:./dev.db
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host"

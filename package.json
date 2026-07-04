@@ -1,0 +1,24 @@
+{
+  "name": "waai-flow-root",
+  "version": "1.0.0",
+  "description": "Open-source WhatsApp AI automation platform with visual flows, agents, and Baileys messaging.",
+  "private": true,
+  "author": "ZQ Developers",
+  "license": "MIT",
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "setup": "npm run install:all && npm run db:push",
+    "db:push": "npx prisma db push --schema backend/prisma/schema.prisma",
+    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "verify": "npm run build",
+    "start": "pm2 start ecosystem.config.cjs",
+    "stop": "pm2 stop ecosystem.config.cjs",
+    "logs": "pm2 logs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

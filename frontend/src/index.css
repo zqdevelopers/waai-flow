@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #06130F;
+  --color-surface: #0B1F19;
+  --color-surface-hover: #123126;
+  --color-foreground: #F3FBF7;
+  --color-muted: #9BC7B6;
+  --color-border: #1D3A31;
+  
+  --color-primary: #25D366;
+  --color-primary-hover: #1DB954;
+  
+  --color-success: #10B981;
+  --color-success-bg: rgba(37, 211, 102, 0.14);
+  --color-danger: #EF4444;
+  --color-danger-bg: rgba(239, 68, 68, 0.1);
+  --color-warning: #F59E0B;
+  --color-info: #34B7F1;
+}
+
+:root[data-theme="light"] {
+  --color-background: #F4FBF7;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #EAF7F0;
+  --color-foreground: #0B141A;
+  --color-muted: #54656F;
+  --color-border: #D7E8DE;
+  --color-primary: #128C7E;
+  --color-primary-hover: #075E54;
+  --color-success-bg: rgba(18, 140, 126, 0.12);
+  --color-danger-bg: rgba(239, 68, 68, 0.12);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.bg-surface {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(37, 211, 102, 0.08), transparent 28%),
+    linear-gradient(180deg, #06130F 0%, #081711 100%);
+}
+
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(18, 140, 126, 0.12), transparent 30%),
+    linear-gradient(180deg, #F4FBF7 0%, #EEF8F2 100%);
+}
+
+:root[data-theme="light"] .text-white {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .bg-primary.text-white,
+:root[data-theme="light"] .bg-success.text-white,
+:root[data-theme="light"] .bg-danger.text-white,
+:root[data-theme="light"] .bg-primary .text-white,
+:root[data-theme="light"] .bg-success .text-white,
+:root[data-theme="light"] .bg-danger .text-white {
+  color: #FFFFFF;
+}
+
+:root[data-theme="light"] .text-primary {
+  color: #128C7E;
+}
+
+:root[data-theme="dark"] .text-primary {
+  color: #25D366;
+}
+
+:root[data-theme="light"] .text-slate-200,
+:root[data-theme="light"] .text-slate-300 {
+  color: #1E293B;
+}
+
+:root[data-theme="light"] .text-slate-400 {
+  color: #475569;
+}
+
+:root[data-theme="light"] .text-slate-500 {
+  color: #64748B;
+}
+
+:root[data-theme="light"] .bg-slate-800 {
+  background-color: #E2E8F0;
+}
+
+:root[data-theme="light"] .border-slate-700 {
+  border-color: #CBD5E1;
+}
+
+:root[data-theme="light"] .hover\:border-slate-700:hover,
+:root[data-theme="light"] .hover\:border-slate-600:hover {
+  border-color: #94A3B8;
+}
+
+:root[data-theme="light"] .hover\:text-white:hover {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] select {
+  color: #0F172A;
+}
+
+:root[data-theme="light"] .react-flow {
+  color: #0F172A;
+}
+
+.react-flow__node {
+  border-radius: 8px;
+}
+
+.recharts-wrapper {
+  outline: none;
+}
+
+/* Custom Scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}

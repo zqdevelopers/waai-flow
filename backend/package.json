@@ -1,7 +1,7 @@
 {
   "name": "waai-backend",
   "version": "1.0.0",
-  "description": "Backend API for the open-source WhatsApp Agent automation dashboard.",
+  "description": "Backend API for the open-source WAAI Flow automation platform.",
   "author": "ZQ Developers",
   "license": "MIT",
   "main": "src/app.js",

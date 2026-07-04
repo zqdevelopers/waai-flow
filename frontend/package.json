@@ -1,0 +1,41 @@
+{
+  "name": "waai-flow-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "description": "React dashboard for the open-source WAAI Flow automation platform.",
+  "author": "ZQ Developers",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@tanstack/react-query": "^5.101.2",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@xyflow/react": "^12.11.1",
+    "autoprefixer": "^10.5.2",
+    "axios": "^1.18.1",
+    "clsx": "^2.1.1",
+    "express": "^5.2.1",
+    "lucide-react": "^1.23.0",
+    "postcss": "^8.5.16",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-hook-form": "^7.80.0",
+    "react-router-dom": "^7.18.1",
+    "recharts": "^3.9.2",
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.2",
+    "zod": "^4.4.3"
+  }
+}
