@@ -31,6 +31,8 @@ jobs:
 
       - name: Generate Prisma client
         run: npm run prisma:generate --prefix backend
+        env:
+          DATABASE_URL: file:./dev.db
 
       - name: Check backend syntax
         run: find backend/src -name "*.js" -print0 | xargs -0 -n1 node --check
