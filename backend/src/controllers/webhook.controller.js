@@ -7,7 +7,10 @@ export const handleWebhook = async (req, res) => {
   const payload = req.body;
 
   try {
-    const flow = await prisma.flow.findUnique({ where: { id: flowId } });
+    const flow = await prisma.flow.findUnique({
+      where: { id: flowId },
+      include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } }
+    });
     if (!flow || !flow.isActive) {
       return res.status(404).json({ error: 'Flow not found or inactive' });
     }

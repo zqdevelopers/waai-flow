@@ -2,48 +2,57 @@ import express from 'express';
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { mkdirSync, existsSync } from 'fs';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import { rateLimit } from 'express-rate-limit';
 import dotenv from 'dotenv';
 import pino from 'pino';
 import { connectDB } from './database/index.js';
 import mainRoutes from './routes/index.js';
+import webhookRoutes from './routes/webhook.routes.js';
 import { pluginLoader } from './plugins/loader.js';
 import authRoutes, { requireAuth } from './auth.js';
 import { dataPath } from './paths.js';
+import { baileyService } from './baileys/index.js';
 
 // Load environment variables
 dotenv.config();
 
 export const logBuffer = [];
 
-// Create logger
-export const logger = pino({
-  hooks: {
-    logMethod(args, method) {
-      const message = args.map((arg) => {
-        if (arg instanceof Error) return arg.message;
-        if (typeof arg === 'object') return JSON.stringify(arg);
-        return String(arg);
-      }).join(' ');
+const logDir = dataPath('logs');
+if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
 
-      logBuffer.push({
-        level: this.level,
-        message,
-        time: new Date().toISOString()
-      });
-      if (logBuffer.length > 500) logBuffer.shift();
+// Create logger with in-memory buffer + persistent file output
+export const logger = pino(
+  {
+    hooks: {
+      logMethod(args, method) {
+        const message = args.map((arg) => {
+          if (arg instanceof Error) return arg.message;
+          if (typeof arg === 'object') return JSON.stringify(arg);
+          return String(arg);
+        }).join(' ');
 
-      return method.apply(this, args);
+        logBuffer.push({
+          level: this.level,
+          message,
+          time: new Date().toISOString()
+        });
+        if (logBuffer.length > 500) logBuffer.shift();
+
+        return method.apply(this, args);
+      }
     }
   },
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true
-    }
-  }
-});
+  pino.transport({
+    targets: [
+      { target: 'pino-pretty', options: { colorize: true }, level: 'info' },
+      { target: 'pino/file', options: { destination: dataPath('logs', 'app.log'), append: true }, level: 'info' }
+    ]
+  })
+);
 
 const app = express();
 const server = createServer(app);
@@ -51,16 +60,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const frontendDist = path.resolve(__dirname, '../../frontend/dist');
 
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim())
+  : '*';
+
+const corsOptions = { origin: corsOrigins, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] };
+
 // Configure Socket.IO
-export const io = new Server(server, {
-  cors: {
-    origin: '*', // For development. Update in production.
-    methods: ['GET', 'POST']
-  }
+export const io = new Server(server, { cors: corsOptions });
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later' }
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down' }
 });
 
 // Middlewares
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(dataPath('uploads')));
@@ -71,8 +97,9 @@ app.get('/api/status', (req, res) => {
 });
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api', requireAuth, mainRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/webhook', apiLimiter, webhookRoutes);
+app.use('/api', apiLimiter, requireAuth, mainRoutes);
 
 app.use(express.static(frontendDist));
 app.get('*', (req, res, next) => {
@@ -95,8 +122,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
-import { baileyService } from './baileys/index.js';
 
 // Connect DB and Start Server
 connectDB().then(async () => {

@@ -9,6 +9,7 @@ const serializeFlowJson = (value, fallback = '[]') => {
       JSON.parse(value);
       return value;
     } catch {
+      logger.warn(`serializeFlowJson: invalid JSON received, falling back to ${fallback}`);
       return fallback;
     }
   }
@@ -21,7 +22,10 @@ const pickDefined = (data) => Object.fromEntries(
 
 export const getFlows = async (req, res) => {
   try {
-    const flows = await prisma.flow.findMany();
+    const flows = await prisma.flow.findMany({
+      include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } },
+      orderBy: { updatedAt: 'desc' }
+    });
     res.json(flows);
   } catch (error) {
     logger.error(error);
@@ -91,7 +95,10 @@ export const runFlow = async (req, res) => {
   const { variables } = req.body;
   
   try {
-    const flow = await prisma.flow.findUnique({ where: { id } });
+    const flow = await prisma.flow.findUnique({
+      where: { id },
+      include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } }
+    });
     if (!flow) return res.status(404).json({ error: 'Flow not found' });
     
     const result = await flowEngine.execute(flow, variables || {});

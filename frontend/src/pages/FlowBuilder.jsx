@@ -10,7 +10,7 @@ import {
   Panel
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, Play, Plus } from 'lucide-react';
+import { Save, Play, Plus, Trash2 } from 'lucide-react';
 import api from '../api';
 
 const initialNodes = [
@@ -37,12 +37,19 @@ const FlowBuilder = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [flows, setFlows] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [currentFlowId, setCurrentFlowId] = useState(null);
   const [flowName, setFlowName] = useState('New Flow');
+  const [flowSessionId, setFlowSessionId] = useState('');
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [testVariables, setTestVariables] = useState('{\n  "sender": "",\n  "message": "Hello",\n  "webhookPayload": {}\n}');
 
   useEffect(() => {
     fetchFlows();
+    fetchSessions();
   }, []);
+
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) || null;
 
   const fetchFlows = async () => {
     try {
@@ -50,6 +57,15 @@ const FlowBuilder = () => {
       setFlows(res.data);
     } catch (error) {
       console.error('Error fetching flows', error);
+    }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await api.get('/session');
+      setSessions(res.data);
+    } catch (error) {
+      console.error('Error fetching sessions', error);
     }
   };
 
@@ -63,7 +79,8 @@ const FlowBuilder = () => {
       name: flowName,
       nodes: JSON.stringify(nodes),
       edges: JSON.stringify(edges),
-      isActive: true
+      isActive: true,
+      sessionId: flowSessionId || null
     };
 
     try {
@@ -73,52 +90,81 @@ const FlowBuilder = () => {
       } else {
         const res = await api.post('/flows', payload);
         setCurrentFlowId(res.data.id);
-        fetchFlows();
         alert('Flow created successfully');
       }
+      fetchFlows();
     } catch (error) {
-      alert('Error saving flow');
+      alert(error.response?.data?.error || 'Error saving flow');
     }
   };
 
   const loadFlow = (flow) => {
     setCurrentFlowId(flow.id);
     setFlowName(flow.name);
+    setFlowSessionId(flow.sessionId || '');
     setNodes(parseFlowJson(flow.nodes, initialNodes));
     setEdges(parseFlowJson(flow.edges, initialEdges));
+    setSelectedNodeId(null);
   };
 
   const createNewFlow = () => {
     setCurrentFlowId(null);
     setFlowName('New Flow');
+    setFlowSessionId('');
     setNodes(initialNodes);
     setEdges(initialEdges);
+    setSelectedNodeId(null);
   };
 
   const runFlow = async () => {
     if (!currentFlowId) return alert('Save flow first!');
     try {
-      await api.post(`/flows/run/${currentFlowId}`, { variables: {} });
+      const variables = JSON.parse(testVariables || '{}');
+      await api.post(`/flows/run/${currentFlowId}`, { variables });
       alert('Flow execution triggered (check console/logs)');
     } catch (error) {
-      alert('Error running flow');
+      alert(error.response?.data?.error || error.message || 'Error running flow');
     }
+  };
+
+  const defaultDataForNode = (type, label) => {
+    const base = { label, pluginType: type };
+    if (type === 'send_message') return { ...base, text: 'Hello {{sender}}', to: '{{sender}}', sessionId: '' };
+    if (type === 'ai_chat') return { ...base, prompt: '{{message}}', provider: 'openai', model: 'gpt-4o' };
+    return base;
   };
 
   const addNode = (type, label) => {
     const newNode = {
       id: `node_${Date.now()}`,
       position: { x: Math.random() * 200 + 100, y: Math.random() * 200 + 100 },
-      data: { label, pluginType: type },
+      data: defaultDataForNode(type, label),
       type: 'default' // Add custom types later
     };
     setNodes((nds) => nds.concat(newNode));
+    setSelectedNodeId(newNode.id);
+  };
+
+  const updateSelectedNodeData = (key, value) => {
+    if (!selectedNodeId) return;
+    setNodes((current) => current.map((node) => (
+      node.id === selectedNodeId
+        ? { ...node, data: { ...node.data, [key]: value } }
+        : node
+    )));
+  };
+
+  const deleteSelectedNode = () => {
+    if (!selectedNodeId) return;
+    setNodes((current) => current.filter((node) => node.id !== selectedNodeId));
+    setEdges((current) => current.filter((edge) => edge.source !== selectedNodeId && edge.target !== selectedNodeId));
+    setSelectedNodeId(null);
   };
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
       {/* Sidebar for Flows List and Nodes Palette */}
-      <div className="w-[300px] bg-surface border-r border-border flex flex-col shrink-0 relative z-10">
+      <div className="w-[340px] bg-surface border-r border-border flex flex-col shrink-0 relative z-10">
         <div className="p-4 border-b border-border">
           <button 
             onClick={createNewFlow}
@@ -148,6 +194,18 @@ const FlowBuilder = () => {
             )}
           </div>
 
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Flow Session</h3>
+          <select
+            value={flowSessionId}
+            onChange={(e) => setFlowSessionId(e.target.value)}
+            className="w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50 mb-8"
+          >
+            <option value="">Use node session</option>
+            {sessions.map((session) => (
+              <option key={session.id} value={session.id}>{session.name} ({session.status})</option>
+            ))}
+          </select>
+
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Add Nodes</h3>
           <div className="space-y-2">
             <button onClick={() => addNode('webhook_trigger', 'Webhook Trigger')} className="w-full flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary bg-background text-sm font-medium text-slate-300 hover:text-white transition group">
@@ -163,6 +221,14 @@ const FlowBuilder = () => {
               <Plus size={14} className="text-slate-500 group-hover:text-primary" />
             </button>
           </div>
+
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-8 mb-3">Test Variables</h3>
+          <textarea
+            value={testVariables}
+            onChange={(e) => setTestVariables(e.target.value)}
+            rows={7}
+            className="w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50 font-mono text-xs"
+          />
         </div>
       </div>
 
@@ -174,6 +240,8 @@ const FlowBuilder = () => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+          onPaneClick={() => setSelectedNodeId(null)}
           colorMode="dark"
           fitView
         >
@@ -208,6 +276,112 @@ const FlowBuilder = () => {
           />
           <Background variant="dots" gap={16} size={1} color="#1E2532" />
         </ReactFlow>
+        {selectedNode && (
+          <div className="absolute top-20 right-4 w-[360px] bg-surface border border-border rounded-xl shadow-2xl p-4 z-20">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <div className="text-xs uppercase text-slate-500 font-semibold">Node Settings</div>
+                <div className="text-white font-semibold mt-1">{selectedNode.data.label}</div>
+              </div>
+              <button onClick={deleteSelectedNode} className="text-danger hover:bg-danger/10 rounded-lg p-2">
+                <Trash2 size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs text-slate-500 uppercase">Label</span>
+                <input
+                  value={selectedNode.data.label || ''}
+                  onChange={(e) => updateSelectedNodeData('label', e.target.value)}
+                  className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                />
+              </label>
+
+              {selectedNode.data.pluginType === 'send_message' && (
+                <>
+                  <label className="block">
+                    <span className="text-xs text-slate-500 uppercase">Session</span>
+                    <select
+                      value={selectedNode.data.sessionId || ''}
+                      onChange={(e) => updateSelectedNodeData('sessionId', e.target.value)}
+                      className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                    >
+                      <option value="">Use flow session</option>
+                      {sessions.map((session) => (
+                        <option key={session.id} value={session.sessionId}>{session.name} ({session.status})</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-slate-500 uppercase">Recipient JID</span>
+                    <input
+                      value={selectedNode.data.to || ''}
+                      onChange={(e) => updateSelectedNodeData('to', e.target.value)}
+                      placeholder="{{sender}} or 923...@s.whatsapp.net"
+                      className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-slate-500 uppercase">Message Text</span>
+                    <textarea
+                      value={selectedNode.data.text || ''}
+                      onChange={(e) => updateSelectedNodeData('text', e.target.value)}
+                      rows={4}
+                      placeholder="Hello {{sender}}"
+                      className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                    />
+                  </label>
+                </>
+              )}
+
+              {selectedNode.data.pluginType === 'ai_chat' && (
+                <>
+                  <label className="block">
+                    <span className="text-xs text-slate-500 uppercase">Provider</span>
+                    <select
+                      value={selectedNode.data.provider || 'openai'}
+                      onChange={(e) => updateSelectedNodeData('provider', e.target.value)}
+                      className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                    >
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                      <option value="ollama">Ollama</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-slate-500 uppercase">Model</span>
+                    <input
+                      value={selectedNode.data.model || 'gpt-4o'}
+                      onChange={(e) => updateSelectedNodeData('model', e.target.value)}
+                      className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-slate-500 uppercase">Prompt</span>
+                    <textarea
+                      value={selectedNode.data.prompt || ''}
+                      onChange={(e) => updateSelectedNodeData('prompt', e.target.value)}
+                      rows={5}
+                      placeholder="Reply to: {{message}}"
+                      className="mt-1 w-full bg-background border border-border text-slate-200 rounded-lg p-2.5 outline-none focus:border-primary/50"
+                    />
+                  </label>
+                </>
+              )}
+
+              {selectedNode.data.pluginType === 'webhook_trigger' && (
+                <div className="text-sm text-slate-400 bg-background border border-border rounded-lg p-3">
+                  Trigger this flow with <code className="text-primary">POST /api/webhook/{currentFlowId || ':flowId'}</code>.
+                </div>
+              )}
+
+              <div className="text-xs text-slate-500">
+                Variables support dot paths, for example <code>{'{{webhookPayload.sender}}'}</code>.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

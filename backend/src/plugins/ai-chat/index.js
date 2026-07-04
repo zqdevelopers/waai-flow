@@ -1,4 +1,7 @@
 import { OpenAIProvider } from '../../ai/openai.provider.js';
+import { GeminiProvider } from '../../ai/gemini.provider.js';
+import { OllamaProvider } from '../../ai/ollama.provider.js';
+import { renderFlowTemplate } from '../../flow/template.js';
 
 export default {
   type: "ai_chat",
@@ -6,7 +9,7 @@ export default {
   icon: "Bot",
   category: "AI",
   inputs: ["prompt", "provider", "model"],
-  outputs: ["response"],
+  outputs: ["aiResponse"],
   config: {
     prompt: "",
     provider: "openai",
@@ -16,28 +19,24 @@ export default {
     ctx.logger.info(`Executing AI Chat Plugin`);
     const provider = data.provider || this.config.provider;
     const model = data.model || this.config.model;
-    let prompt = data.prompt || '';
-    
-    // Simple template replacement
-    if (ctx.variables) {
-      for (const [key, value] of Object.entries(ctx.variables)) {
-        prompt = prompt.replaceAll(`{{${key}}}`, String(value ?? ''));
-      }
+    const prompt = renderFlowTemplate(data.prompt || '', ctx.variables);
+
+    let ai;
+    switch (provider) {
+      case 'gemini':
+        ai = new GeminiProvider({ model });
+        break;
+      case 'ollama':
+        ai = new OllamaProvider({ model });
+        break;
+      case 'openai':
+      default:
+        ai = new OpenAIProvider({ model });
     }
 
-    let aiResponse = '';
+    const aiResponse = await ai.chat([{ role: 'user', content: prompt }]);
 
-    if (provider === 'openai') {
-      const ai = new OpenAIProvider({ model });
-      aiResponse = await ai.chat([{ role: 'user', content: prompt }]);
-    } else {
-      // Stub for other providers
-      aiResponse = `Mock response for ${provider}`;
-    }
-
-    // Save to context variables to be used by next nodes
     ctx.variables = { ...ctx.variables, aiResponse };
-
     return ctx;
   }
 }

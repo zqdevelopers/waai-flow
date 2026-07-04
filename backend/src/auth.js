@@ -43,11 +43,25 @@ const getAdminCredentials = () => ({
   password: process.env.ADMIN_PASSWORD || 'admin123'
 });
 
+const timingSafeEqual = (a, b) => {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) {
+    // Still compare to avoid length-based timing leak, then return false
+    crypto.timingSafeEqual(bufA, Buffer.alloc(bufA.length));
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+};
+
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
   const admin = getAdminCredentials();
 
-  if (username !== admin.username || password !== admin.password) {
+  const usernameMatch = timingSafeEqual(username || '', admin.username);
+  const passwordMatch = timingSafeEqual(password || '', admin.password);
+
+  if (!usernameMatch || !passwordMatch) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 

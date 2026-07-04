@@ -1,3 +1,5 @@
+import { renderFlowTemplate } from '../../flow/template.js';
+
 export default {
   type: "send_message",
   name: "Send Message",
@@ -11,17 +13,11 @@ export default {
     sessionId: ""
   },
   async execute(ctx, data) {
-    const sessionId = data.sessionId || ctx.flow.sessionId;
-    // Replace variables in text
-    let text = data.text || '';
-    if (ctx.variables) {
-      for (const [key, value] of Object.entries(ctx.variables)) {
-        text = text.replaceAll(`{{${key}}}`, String(value ?? ''));
-      }
-    }
+    const sessionId = data.sessionId || ctx.flow.Session?.sessionId || ctx.flow.sessionKey || ctx.flow.sessionId;
+    const text = renderFlowTemplate(data.text || '', ctx.variables);
 
     // Determine recipient: from context (webhook or trigger) or static data
-    const to = data.to || ctx.variables.sender || '';
+    const to = renderFlowTemplate(data.to || ctx.variables?.sender || ctx.variables?.webhookPayload?.sender || '', ctx.variables);
 
     if (!sessionId || !to) {
       throw new Error('Missing sessionId or recipient (to)');

@@ -86,7 +86,9 @@ class BaileysService {
 
     sock.ev.on('creds.update', saveCreds);
 
-    this.setupSessionUtilities(sessionId, sock);
+    this.setupSessionUtilities(sessionId, sock).catch((error) => {
+      logger.error({ error, sessionId }, 'Failed to setup session utilities');
+    });
 
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -100,7 +102,10 @@ class BaileysService {
       }
 
       if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+        const statusCode = lastDisconnect?.error instanceof Boom
+          ? lastDisconnect.error.output?.statusCode
+          : undefined;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         logger.info(`Session ${sessionId} closed. Reconnecting: ${shouldReconnect}`);
         
         const newStatus = shouldReconnect ? 'CONNECTING' : 'DISCONNECTED';
@@ -145,7 +150,9 @@ class BaileysService {
             await this.autoReplies.get(sessionId)?.processMessage(msg).catch((error) => {
               logger.warn({ error, sessionId }, 'Auto-reply failed');
             });
-            this.handleIncomingMessage(sessionId, msg, sock);
+            await this.handleIncomingMessage(sessionId, msg, sock).catch((error) => {
+              logger.warn({ error, sessionId }, 'Incoming message handler failed');
+            });
           }
         }
       }
@@ -357,7 +364,13 @@ class BaileysService {
 
   async getAutoReplyRules() {
     const row = await prisma.settings.findUnique({ where: { key: 'automation.autoReplies' } });
-    return row ? JSON.parse(row.value || '[]') : [];
+    if (!row) return [];
+    try {
+      return JSON.parse(row.value || '[]');
+    } catch {
+      logger.warn('automation.autoReplies setting contains invalid JSON, returning empty rules');
+      return [];
+    }
   }
 
   async saveAutoReplyRules(rules) {
@@ -512,7 +525,7 @@ class BaileysService {
     logger.info(`Message received on ${sessionId}: ${msg.key.remoteJid}`);
     const remoteJid = msg.key.remoteJid;
     const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-    
+
     // Save to DB
     await prisma.message.create({
       data: {
@@ -524,8 +537,30 @@ class BaileysService {
       }
     });
 
-    // Fire webhook/trigger flow
-    // ...
+    // Trigger active flows that have a webhook_trigger node and are linked to this session
+    try {
+      const { flowEngine } = await import('../flow/engine.js');
+      const flows = await prisma.flow.findMany({
+        where: { isActive: true, sessionId },
+        include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } }
+      });
+      for (const flow of flows) {
+        const nodes = JSON.parse(flow.nodes || '[]');
+        const hasTrigger = nodes.some((node) => {
+          const type = node?.data?.pluginType || node?.data?.type || node?.type || '';
+          return type.includes('trigger') || type === 'webhook_trigger';
+        });
+        if (!hasTrigger) continue;
+        flowEngine.execute(flow, {
+          sender: remoteJid,
+          text,
+          messageId: msg.key.id,
+          sessionId
+        }).catch((error) => logger.warn({ error, flowId: flow.id }, 'Flow trigger failed'));
+      }
+    } catch (error) {
+      logger.warn({ error, sessionId }, 'Failed to trigger flows for incoming message');
+    }
   }
 }
 
