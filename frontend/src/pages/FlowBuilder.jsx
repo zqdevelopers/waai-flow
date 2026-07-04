@@ -56,6 +56,7 @@ const NodeShell = ({ nodeType, selected, children, bottomHandles, noTargetHandle
 const WebhookTriggerNode = ({ data, selected }) => (
   <NodeShell nodeType="webhook_trigger" selected={selected} noTargetHandle>
     <div className="text-blue-400 font-mono text-[10px]">POST /api/webhook/…</div>
+    {data.secret && <div className="text-amber-400 text-[9px] font-mono">🔒 secret set</div>}
   </NodeShell>
 );
 
@@ -311,12 +312,27 @@ const FlowBuilder = () => {
     switch (type) {
       case 'webhook_trigger':
         body = (
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs space-y-2">
-            <div className="text-blue-400 font-bold">Webhook URL</div>
-            <code className="text-slate-300 break-all block">POST /api/webhook/{currentFlowId || ':flowId'}</code>
-            <div className="text-slate-500">Send any JSON payload. Fields available as <code className="text-blue-400">{'{{webhookPayload.field}}'}</code></div>
-            <div className="text-slate-500 mt-1">Built-in variables: <code className="text-blue-400">{'{{sender}}'}</code>, <code className="text-blue-400">{'{{message}}'}</code></div>
-          </div>
+          <>
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs space-y-1.5">
+              <div className="text-blue-400 font-bold">Webhook URL</div>
+              <code className="text-slate-300 break-all block text-[10px]">POST /api/webhook/{currentFlowId || ':flowId'}</code>
+              <div className="text-slate-500 text-[10px]">Payload fields available as <code className="text-blue-400">{'{{webhookPayload.field}}'}</code></div>
+              <div className="text-slate-500 text-[10px]">Built-in: <code className="text-blue-400">{'{{sender}}'}</code>, <code className="text-blue-400">{'{{message}}'}</code></div>
+            </div>
+            {field('Webhook Secret (optional)', 'secret', { placeholder: 'my-secret-token', type: 'password' })}
+            <p className="text-[10px] text-slate-500 -mt-1">When set, requests must include <code className="text-slate-400">X-Webhook-Secret: your-token</code></p>
+            <label className="block">
+              <FieldLabel>Variable Mappings (optional)</FieldLabel>
+              <textarea
+                rows={5}
+                value={d.variableMappings ?? ''}
+                onChange={e => updateNode('variableMappings', e.target.value)}
+                placeholder={'{\n  "customerName": "webhookPayload.customer.name",\n  "orderId": "webhookPayload.order.id"\n}'}
+                className={inputCls + ' font-mono text-[11px]'}
+              />
+            </label>
+            <p className="text-[10px] text-slate-500 -mt-1">Map nested payload fields to simple variable names. Use <code className="text-blue-400">{'{{customerName}}'}</code> in downstream nodes.</p>
+          </>
         );
         break;
 
