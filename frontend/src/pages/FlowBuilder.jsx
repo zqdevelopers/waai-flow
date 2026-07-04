@@ -60,12 +60,123 @@ const WebhookTriggerNode = ({ data, selected }) => (
   </NodeShell>
 );
 
-const SendMessageNode = ({ data, selected }) => (
-  <NodeShell nodeType="send_message" selected={selected}>
-    <div className="text-emerald-400 truncate">{data.to || '{{sender}}'}</div>
-    <div className="text-slate-500 truncate">{data.text || 'Message text…'}</div>
-  </NodeShell>
+const MSG_TYPE_ICON = {
+  text: '💬', image: '🖼️', video: '🎥', gif: '🎞️', audio: '🎵',
+  document: '📄', sticker: '🎭', location: '📍', contact: '👤',
+  poll: '📊', buttons: '🔘', urlButtons: '🔗', copyButton: '📋', list: '📋',
+};
+const SendMessageNode = ({ data, selected }) => {
+  const type = data.messageType || 'text';
+  return (
+    <NodeShell nodeType="send_message" selected={selected}>
+      <div className="text-emerald-400 truncate">{data.to || '{{sender}}'}</div>
+      <div className="text-slate-500 text-[10px] flex items-center gap-1">
+        <span>{MSG_TYPE_ICON[type] || '💬'}</span>
+        <span className="font-medium text-slate-400">{type}</span>
+        {data.text && <span className="truncate">· {data.text.slice(0, 18)}</span>}
+      </div>
+    </NodeShell>
+  );
+};
+
+// ─── Shared UI helpers for dynamic arrays ─────────────────────────────────────
+const listInputCls = 'w-full bg-[#060f0c] border border-[#1a3028] text-slate-200 text-xs rounded p-1.5 outline-none focus:border-primary/50 placeholder:text-slate-600';
+
+const StrList = ({ items = [], onChange, placeholder = 'Item', addLabel = 'Add item' }) => (
+  <div>
+    <div className="space-y-1.5">
+      {items.map((v, i) => (
+        <div key={i} className="flex gap-1.5">
+          <input value={v} onChange={e => onChange(items.map((x, idx) => idx === i ? e.target.value : x))}
+            placeholder={`${placeholder} ${i + 1}`} className={listInputCls + ' flex-1'} />
+          <button onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+            className="text-red-400 hover:bg-red-400/10 rounded p-1 shrink-0"><X size={11} /></button>
+        </div>
+      ))}
+    </div>
+    <button onClick={() => onChange([...items, ''])}
+      className="mt-1.5 text-[11px] text-primary hover:text-white flex items-center gap-1 transition">
+      <Plus size={10} /> {addLabel}
+    </button>
+  </div>
 );
+
+const DynList = ({ items = [], onChange, fields, addLabel = 'Add' }) => {
+  const blank = () => Object.fromEntries(fields.map(f => [f.key, '']));
+  const upd = (i, k, v) => onChange(items.map((x, idx) => idx === i ? { ...x, [k]: v } : x));
+  return (
+    <div>
+      <div className="space-y-2">
+        {items.map((item, i) => (
+          <div key={i} className="bg-[#060f0c] border border-[#1a3028] rounded-lg p-2">
+            <div className="flex justify-end mb-1">
+              <button onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+                className="text-red-400 hover:bg-red-400/10 rounded p-0.5"><X size={10} /></button>
+            </div>
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: fields.length > 1 ? '1fr 1fr' : '1fr' }}>
+              {fields.map(f => (
+                <label key={f.key} className={f.full ? 'col-span-2' : ''}>
+                  <div className="text-[9px] uppercase text-slate-600 mb-0.5">{f.label}</div>
+                  <input value={item[f.key] || ''} onChange={e => upd(i, f.key, e.target.value)}
+                    placeholder={f.placeholder || ''} className={listInputCls} />
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => onChange([...items, blank()])}
+        className="mt-1.5 text-[11px] text-primary hover:text-white flex items-center gap-1 transition">
+        <Plus size={10} /> {addLabel}
+      </button>
+    </div>
+  );
+};
+
+const SectionEditor = ({ sections = [], onChange }) => {
+  const updSec = (i, k, v) => onChange(sections.map((s, si) => si === i ? { ...s, [k]: v } : s));
+  const updRow = (si, ri, k, v) => onChange(sections.map((s, i) => i === si
+    ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, [k]: v } : r) } : s));
+  const addRow = (si) => onChange(sections.map((s, i) => i === si
+    ? { ...s, rows: [...(s.rows || []), { id: `r${Date.now()}`, title: '', description: '' }] } : s));
+  const delRow = (si, ri) => onChange(sections.map((s, i) => i === si
+    ? { ...s, rows: s.rows.filter((_, j) => j !== ri) } : s));
+  return (
+    <div className="space-y-3">
+      {sections.map((sec, si) => (
+        <div key={si} className="bg-[#060f0c] border border-[#1a3028] rounded-lg p-3">
+          <div className="flex gap-1.5 items-center mb-2">
+            <input value={sec.title || ''} onChange={e => updSec(si, 'title', e.target.value)}
+              placeholder={`Section ${si + 1} title`} className={listInputCls + ' flex-1'} />
+            <button onClick={() => onChange(sections.filter((_, i) => i !== si))}
+              className="text-red-400 rounded p-0.5 shrink-0"><X size={12} /></button>
+          </div>
+          <div className="pl-2 border-l border-[#1a3028] space-y-1.5">
+            {(sec.rows || []).map((row, ri) => (
+              <div key={ri} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-end">
+                <input value={row.id || ''} onChange={e => updRow(si, ri, 'id', e.target.value)}
+                  placeholder="Row ID" className={listInputCls} />
+                <input value={row.title || ''} onChange={e => updRow(si, ri, 'title', e.target.value)}
+                  placeholder="Row title" className={listInputCls} />
+                <button onClick={() => delRow(si, ri)} className="text-red-400 rounded p-0.5 mb-0.5"><X size={11} /></button>
+                <input value={row.description || ''} onChange={e => updRow(si, ri, 'description', e.target.value)}
+                  placeholder="Description (optional)" className={listInputCls + ' col-span-2'} />
+              </div>
+            ))}
+            <button onClick={() => addRow(si)}
+              className="text-[11px] text-primary hover:text-white flex items-center gap-1 transition">
+              <Plus size={10} /> Add row
+            </button>
+          </div>
+        </div>
+      ))}
+      <button onClick={() => onChange([...sections, { title: '', rows: [] }])}
+        className="text-[11px] text-primary hover:text-white flex items-center gap-1 transition">
+        <Plus size={10} /> Add section
+      </button>
+    </div>
+  );
+};
 
 const AiChatNode = ({ data, selected }) => (
   <NodeShell nodeType="ai_chat" selected={selected}>
@@ -138,7 +249,7 @@ const defaultData = (type) => {
   const label = NODE_DEFS[type]?.label || type;
   const base = { label, pluginType: type };
   switch (type) {
-    case 'send_message':   return { ...base, text: 'Hello {{sender}}', to: '{{sender}}', sessionId: '' };
+    case 'send_message':   return { ...base, text: 'Hello {{sender}}', to: '{{sender}}', sessionId: '', messageType: 'text', buttons: [], urlButtons: [], pollValues: [], sections: [] };
     case 'ai_chat':        return { ...base, prompt: '{{message}}', provider: 'openai', model: 'gpt-4o' };
     case 'condition':      return { ...base, variable: 'message', operator: 'contains', value: '' };
     case 'delay':          return { ...base, delayMs: 1000 };
@@ -339,43 +450,146 @@ const FlowBuilder = () => {
         );
         break;
 
-      case 'send_message':
+      case 'send_message': {
+        const msgType = d.messageType || 'text';
+        const ga = (key) => Array.isArray(d[key]) ? d[key] : [];
+        const isMedia = ['image','video','gif'].includes(msgType);
         body = (
           <>
             {sel('Session', 'sessionId', [['', 'Use flow session'], ...sessions.map(s => [s.sessionId, `${s.name} (${s.status})`])])}
             {field('Recipient JID', 'to', { placeholder: '{{sender}} or 923...@s.whatsapp.net' })}
             {sel('Message Type', 'messageType', [
-              ['text', 'Text'],
-              ['buttons', 'Quick Reply Buttons'],
-              ['list', 'Interactive List'],
-              ['image', 'Image'],
-              ['video', 'Video'],
-              ['audio', 'Audio'],
-              ['document', 'Document'],
+              ['text',       '💬  Text message'],
+              ['image',      '🖼️  Image'],
+              ['video',      '🎥  Video'],
+              ['gif',        '🎞️  GIF'],
+              ['audio',      '🎵  Audio / Voice note'],
+              ['document',   '📄  Document / File'],
+              ['sticker',    '🎭  Sticker'],
+              ['location',   '📍  Location'],
+              ['contact',    '👤  Contact card'],
+              ['poll',       '📊  Poll'],
+              ['buttons',    '🔘  Quick Reply Buttons'],
+              ['urlButtons', '🔗  URL Buttons'],
+              ['copyButton', '📋  Copy Code Button'],
+              ['list',       '📋  Interactive List'],
             ])}
-            {ta('Message Text / Caption', 'text', 3, { placeholder: 'Hello {{sender}}!\n\nAI reply: {{aiResponse}}' })}
-            {(d.messageType === 'buttons') && (
-              <>
-                {field('Title (optional)', 'title', { placeholder: 'Choose an option' })}
-                {ta('Buttons JSON', 'buttonsJson', 4, { placeholder: '[{"id":"1","text":"Yes"},{"id":"2","text":"No"}]' })}
-                {field('Footer (optional)', 'footer', { placeholder: 'Powered by WAAI' })}
-              </>
-            )}
-            {(d.messageType === 'list') && (
-              <>
-                {field('Button Label', 'buttonText', { placeholder: 'Open Menu' })}
-                {field('Title', 'title', { placeholder: 'Main Menu' })}
-                {ta('Sections JSON', 'sectionsJson', 5, { placeholder: '[{"title":"Options","rows":[{"id":"1","title":"Option 1","description":""}]}]' })}
-                {field('Footer (optional)', 'footer', { placeholder: 'Powered by WAAI' })}
-              </>
-            )}
-            {(['image','video','audio','document'].includes(d.messageType)) && (
-              field('Media URL', 'mediaUrl', { placeholder: 'https://example.com/file.jpg' })
-            )}
-            {hint('Supports all template variables: {{sender}}, {{message}}, {{aiResponse}}, {{httpResponse}}, etc.')}
+
+            {/* ── Text ── */}
+            {msgType === 'text' && ta('Message', 'text', 4, { placeholder: 'Hello {{sender}}!\n\nAI reply: {{aiResponse}}' })}
+
+            {/* ── Image / Video / GIF ── */}
+            {isMedia && <>
+              {field('Media URL', 'mediaUrl', { placeholder: 'https://example.com/image.jpg' })}
+              {ta('Caption (optional)', 'text', 2, { placeholder: 'Caption text…' })}
+            </>}
+
+            {/* ── Audio ── */}
+            {msgType === 'audio' && <>
+              {field('Audio URL', 'mediaUrl', { placeholder: 'https://example.com/audio.mp3' })}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={!!d.ptt} onChange={e => updateNode('ptt', e.target.checked)} className="accent-primary" />
+                <span className="text-xs text-slate-400">Send as voice note (PTT)</span>
+              </label>
+            </>}
+
+            {/* ── Document ── */}
+            {msgType === 'document' && <>
+              {field('Document URL', 'mediaUrl', { placeholder: 'https://example.com/file.pdf' })}
+              {field('File Name', 'fileName', { placeholder: 'document.pdf' })}
+              {field('MIME Type', 'mimetype', { placeholder: 'application/pdf' })}
+              {ta('Caption (optional)', 'text', 2, { placeholder: 'Description…' })}
+            </>}
+
+            {/* ── Sticker ── */}
+            {msgType === 'sticker' && field('Sticker URL (.webp)', 'mediaUrl', { placeholder: 'https://example.com/sticker.webp' })}
+
+            {/* ── Location ── */}
+            {msgType === 'location' && <>
+              <div className="grid grid-cols-2 gap-2">
+                {field('Latitude', 'latitude', { type: 'number', placeholder: '24.8607' })}
+                {field('Longitude', 'longitude', { type: 'number', placeholder: '67.0011' })}
+              </div>
+              {field('Location Name', 'locationName', { placeholder: 'Karachi City' })}
+              {field('Address (optional)', 'address', { placeholder: 'Street, City' })}
+            </>}
+
+            {/* ── Contact ── */}
+            {msgType === 'contact' && <>
+              {field('Full Name', 'contactName', { placeholder: 'John Doe' })}
+              {field('Phone Number', 'contactPhone', { placeholder: '+923001234567' })}
+              {field('Email (optional)', 'contactEmail', { placeholder: 'john@example.com' })}
+              {field('Organization (optional)', 'contactOrg', { placeholder: 'Company Name' })}
+            </>}
+
+            {/* ── Poll ── */}
+            {msgType === 'poll' && <>
+              {field('Poll Question', 'pollName', { placeholder: 'What do you prefer?' })}
+              <label className="block">
+                <FieldLabel>Options (min 2)</FieldLabel>
+                <StrList items={ga('pollValues')} onChange={v => updateNode('pollValues', v)}
+                  placeholder="Option" addLabel="Add option" />
+              </label>
+              {field('Max selectable', 'selectableCount', { type: 'number', min: 1, placeholder: '1' })}
+            </>}
+
+            {/* ── Quick Reply Buttons ── */}
+            {msgType === 'buttons' && <>
+              {ta('Message Text', 'text', 3, { placeholder: 'Please choose:' })}
+              {field('Title (optional)', 'title', { placeholder: '' })}
+              {field('Footer (optional)', 'footer', { placeholder: 'Powered by WAAI' })}
+              <label className="block">
+                <FieldLabel>Buttons (max 3)</FieldLabel>
+                <DynList items={ga('buttons')} onChange={v => updateNode('buttons', v)}
+                  fields={[
+                    { key: 'id',   label: 'ID',   placeholder: 'btn_1' },
+                    { key: 'text', label: 'Label', placeholder: 'Yes' },
+                  ]}
+                  addLabel="Add button" />
+              </label>
+            </>}
+
+            {/* ── URL Buttons ── */}
+            {msgType === 'urlButtons' && <>
+              {ta('Message Text', 'text', 3, { placeholder: 'Visit our website:' })}
+              {field('Title (optional)', 'title', { placeholder: '' })}
+              {field('Footer (optional)', 'footer', { placeholder: '' })}
+              <label className="block">
+                <FieldLabel>URL Buttons (max 2)</FieldLabel>
+                <DynList items={ga('urlButtons')} onChange={v => updateNode('urlButtons', v)}
+                  fields={[
+                    { key: 'text', label: 'Label',       placeholder: 'Open Website' },
+                    { key: 'url',  label: 'URL',         placeholder: 'https://...' },
+                  ]}
+                  addLabel="Add URL button" />
+              </label>
+            </>}
+
+            {/* ── Copy Code Button ── */}
+            {msgType === 'copyButton' && <>
+              {ta('Message Text', 'text', 3, { placeholder: 'Here is your code:' })}
+              {field('Code to Copy', 'copyCode', { placeholder: 'PROMO2025' })}
+              {field('Button Label', 'copyDisplayText', { placeholder: 'Copy Code' })}
+              {field('Footer (optional)', 'footer', { placeholder: '' })}
+            </>}
+
+            {/* ── Interactive List ── */}
+            {msgType === 'list' && <>
+              {ta('Message Body', 'text', 3, { placeholder: 'Please choose from the menu:' })}
+              {field('Title (optional)', 'title', { placeholder: 'Main Menu' })}
+              {field('Button Label', 'buttonText', { placeholder: 'Open Menu' })}
+              {field('Footer (optional)', 'footer', { placeholder: '' })}
+              <label className="block">
+                <FieldLabel>Sections & Rows</FieldLabel>
+                <SectionEditor sections={ga('sections')} onChange={v => updateNode('sections', v)} />
+              </label>
+            </>}
+
+            {hint('Template vars: {{sender}}, {{message}}, {{aiResponse}}, {{httpResponse}}, etc.')}
           </>
         );
         break;
+      }
 
       case 'ai_chat':
         body = (
