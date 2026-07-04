@@ -1,0 +1,32 @@
+{
+  "name": "waai-backend",
+  "version": "1.0.0",
+  "description": "Backend API for the open-source WhatsApp Agent automation dashboard.",
+  "author": "ZQ Developers",
+  "license": "MIT",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@innovatorssoft/baileys": "^7.4.4",
+    "@prisma/client": "^5.14.0",
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "pino": "^9.1.0",
+    "pino-pretty": "^13.1.3",
+    "qrcode-terminal": "^0.12.0",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.2",
+    "prisma": "^5.14.0"
+  }
+}
