@@ -15,8 +15,14 @@ export const handleWebhook = async (req, res) => {
       return res.status(404).json({ error: 'Flow not found or inactive' });
     }
 
-    // Pass the payload as variables to the flow engine
-    const result = await flowEngine.execute(flow, { webhookPayload: payload });
+    // Spread payload as top-level vars AND keep webhookPayload.* for dot-notation access
+    const result = await flowEngine.execute(flow, {
+      ...payload,
+      webhookPayload: payload,
+      sender: payload.sender || '',
+      message: payload.message || payload.text || '',
+      messageId: payload.messageId || ''
+    });
     if (!result?.success) {
       return res.status(400).json({ error: result?.reason || 'Flow execution failed' });
     }

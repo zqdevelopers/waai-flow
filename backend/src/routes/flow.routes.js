@@ -5,6 +5,7 @@ const router = Router();
 
 router.get('/', flowController.getFlows);
 router.post('/', flowController.createFlow);
+router.get('/:id', flowController.getFlow);
 router.put('/:id', flowController.updateFlow);
 router.delete('/:id', flowController.deleteFlow);
 router.post('/run/:id', flowController.runFlow);

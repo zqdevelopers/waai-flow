@@ -136,12 +136,10 @@ const Dashboard = () => {
     const activeWebhooks = data.webhooks.filter((webhook) => webhook.isActive).length;
     const errorLogs = data.logs.filter((log) => ['error', 'fatal'].includes(String(log.level).toLowerCase())).length;
 
-    const messageDayMap = {
-      ...(data.analytics.recentMessagesByDay || {})
-    };
+    const messageDayMap = { ...(data.analytics.recentMessagesByDay || {}) };
     for (const message of data.messages) {
       const key = dayKey(message.createdAt);
-      messageDayMap[key] = Math.max(messageDayMap[key] || 0, 0);
+      messageDayMap[key] = (messageDayMap[key] || 0) + 1;
     }
     const messageSeries = lastSevenDays().map((key) => ({
       name: key.slice(5),

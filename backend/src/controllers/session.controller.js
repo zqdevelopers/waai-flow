@@ -4,8 +4,7 @@ import { baileyService } from '../baileys/index.js';
 
 export const getSessions = async (req, res) => {
   try {
-    const sessions = await prisma.session.findMany();
-    // Inject QR codes into the response
+    const sessions = await prisma.session.findMany({ orderBy: { createdAt: 'asc' } });
     const sessionsWithQr = sessions.map(s => ({
       ...s,
       qr: baileyService.qrCache.get(s.sessionId) || null
@@ -14,6 +13,35 @@ export const getSessions = async (req, res) => {
   } catch (error) {
     logger.error(error);
     res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+};
+
+export const getSession = async (req, res) => {
+  try {
+    const session = await prisma.session.findUnique({ where: { id: req.params.id } });
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    res.json({ ...session, qr: baileyService.qrCache.get(session.sessionId) || null });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to fetch session' });
+  }
+};
+
+export const reconnectSession = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const session = await prisma.session.findUnique({ where: { id } });
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    // Stop existing connection if any, then restart
+    await baileyService.stopSession(session.sessionId).catch(() => {});
+    await prisma.session.update({ where: { id }, data: { status: 'CONNECTING' } });
+    baileyService.startSession(session.sessionId);
+
+    res.json({ success: true, status: 'CONNECTING' });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to reconnect session' });
   }
 };
 

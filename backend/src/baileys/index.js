@@ -540,8 +540,11 @@ class BaileysService {
     // Trigger active flows that have a webhook_trigger node and are linked to this session
     try {
       const { flowEngine } = await import('../flow/engine.js');
+      // Flow.sessionId is the UUID FK to Session.id, not the sessionId string
+      const session = await prisma.session.findUnique({ where: { sessionId } });
+      if (!session) return;
       const flows = await prisma.flow.findMany({
-        where: { isActive: true, sessionId },
+        where: { isActive: true, sessionId: session.id },
         include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } }
       });
       for (const flow of flows) {

@@ -1,0 +1,15 @@
+[phases.install]
+cmds = [
+  'npm ci --prefix backend',
+  'npm ci --prefix frontend',
+]
+
+[phases.build]
+cmds = [
+  'cd backend && npx prisma generate',
+  'cd backend && npx prisma db push --accept-data-loss',
+  'cd frontend && npm run build',
+]
+
+[start]
+cmd = 'cd backend && node src/app.js'

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bot, Play, MessageSquare, MessagesSquare, Megaphone, Webhook, Code2,
   Cpu, Puzzle, Folder, BarChart2, Settings, Globe, FileText, Plus, Trash2,
-  RefreshCw, Save, Send, Upload, Power, Copy, CheckCircle2, XCircle
+  RefreshCw, Save, Send, Upload, Power, Copy, CheckCircle2, XCircle, ChevronRight
 } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { API_BASE_URL } from '../config';
@@ -440,38 +440,333 @@ export const BroadcastPage = () => {
   );
 };
 
+const CodeBlock = ({ code, lang = 'bash' }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = () => { navigator.clipboard?.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  return (
+    <div className="relative bg-[#06130F] border border-border rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+        <span className="text-[10px] uppercase text-slate-500 tracking-wider font-bold">{lang}</span>
+        <button onClick={copy} className="text-xs text-slate-500 hover:text-white transition flex items-center gap-1.5">
+          {copied ? <><CheckCircle2 size={11} className="text-success" /> Copied</> : <><Copy size={11} /> Copy</>}
+        </button>
+      </div>
+      <pre className="p-4 text-xs text-slate-300 overflow-x-auto leading-relaxed font-mono">{code}</pre>
+    </div>
+  );
+};
+
 export const WebhooksPage = () => {
   const { data, load } = useResource('/modules/webhooks');
+  const [testResult, setTestResult] = useState({});
+  const [testBody, setTestBody] = useState('{\n  "sender": "923001234567@s.whatsapp.net",\n  "message": "Hello"\n}');
   const fullUrl = (path) => `${API_BASE_URL.replace(/\/api\/?$/, '')}${path}`;
+
+  const testWebhook = async (item) => {
+    setTestResult({ [item.id]: { loading: true } });
+    try {
+      let body = {};
+      try { body = JSON.parse(testBody); } catch { /* ignore */ }
+      // item.url is e.g. /api/webhook/:flowId — use fullUrl to avoid baseURL double-encoding
+      const res = await fetch(fullUrl(item.url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      setTestResult({ [item.id]: { ok: res.ok, data: JSON.stringify(data, null, 2) } });
+    } catch (err) {
+      setTestResult({ [item.id]: { ok: false, data: err.message } });
+    }
+  };
+
   return (
     <Page title="Webhooks" description="Trigger active flows from external systems using generated webhook URLs." icon={Webhook} actions={<Button variant="secondary" onClick={load}><RefreshCw size={16} /> Refresh</Button>}>
-      <Panel title="Flow Webhooks">
-        {data.length === 0 ? <Empty text="Create a flow to generate webhook URLs." /> : <div className="space-y-3">{data.map((item) => (
-          <div key={item.id} className="bg-background border border-border rounded-lg p-4">
-            <div className="flex items-start justify-between gap-3"><div><h3 className="text-white font-semibold">{item.name}</h3><p className="text-xs text-slate-500 mt-1">{fullUrl(item.url)}</p></div><StatusPill status={item.isActive ? 'active' : 'disabled'} /></div>
-            <div className="flex gap-2 mt-4"><Button variant="secondary" onClick={() => navigator.clipboard?.writeText(fullUrl(item.url))}><Copy size={14} /> Copy URL</Button></div>
-          </div>
-        ))}</div>}
-      </Panel>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5 mb-5">
+        <div className="space-y-5">
+          {/* Flow webhook list */}
+          <Panel title="Flow Webhooks">
+            {data.length === 0 ? <Empty text="Create and save a flow first to generate its webhook URL." /> : (
+              <div className="space-y-4">
+                {data.map((item) => {
+                  const url = fullUrl(item.url);
+                  const curlExample = `curl -X POST "${url}" \\\n  -H "Content-Type: application/json" \\\n  -d '${testBody.replace(/\n/g, ' ')}'`;
+                  const jsExample = `await fetch("${url}", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify(${testBody})\n});`;
+                  const res = testResult[item.id];
+                  return (
+                    <div key={item.id} className="bg-background border border-border rounded-xl p-5 space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-white font-semibold">{item.name}</h3>
+                          <code className="text-xs text-slate-400 mt-1 block break-all">{url}</code>
+                        </div>
+                        <StatusPill status={item.isActive ? 'active' : 'disabled'} />
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="secondary" onClick={() => navigator.clipboard?.writeText(url)}><Copy size={13} /> Copy URL</Button>
+                        <Button variant="secondary" onClick={() => testWebhook(item)}><Play size={13} /> Test</Button>
+                      </div>
+                      {res && (
+                        <div className={`rounded-lg border p-3 text-xs font-mono ${res.loading ? 'border-border text-slate-500' : res.ok ? 'border-success/30 bg-success/5 text-success' : 'border-danger/30 bg-danger/5 text-danger'}`}>
+                          {res.loading ? 'Sending…' : res.data}
+                        </div>
+                      )}
+                      <details className="group">
+                        <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 list-none flex items-center gap-1">
+                          <ChevronRight size={11} className="group-open:rotate-90 transition" /> Code examples
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <CodeBlock lang="curl" code={curlExample} />
+                          <CodeBlock lang="javascript" code={jsExample} />
+                        </div>
+                      </details>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+
+          {/* Test payload editor */}
+          <Panel title="Test Payload">
+            <p className="text-sm text-slate-400 mb-3">JSON body sent when you click <strong className="text-white">Test</strong> on a webhook above.</p>
+            <Textarea rows={6} className="font-mono text-xs" value={testBody} onChange={(e) => setTestBody(e.target.value)} />
+          </Panel>
+        </div>
+
+        {/* Docs sidebar */}
+        <div className="space-y-5">
+          <Panel title="Payload Reference">
+            <div className="space-y-3 text-sm">
+              <p className="text-slate-400">Every webhook accepts a JSON body. The fields are mapped to flow template variables automatically.</p>
+              <div className="space-y-1.5">
+                {[
+                  ['{{sender}}', 'WhatsApp JID of the contact (set this to simulate a real trigger)'],
+                  ['{{message}}', 'Plain-text message body'],
+                  ['{{messageId}}', 'Unique message ID'],
+                  ['{{webhookPayload.*}}', 'Any field in the POST body, e.g. {{webhookPayload.type}}'],
+                  ['{{httpResponse}}', 'Body from the last HTTP Request node'],
+                  ['{{aiResponse}}', 'Text from the last AI Chat node'],
+                  ['{{formattedText}}', 'Output of the last Text Formatter node'],
+                ].map(([v, d]) => (
+                  <div key={v} className="bg-background border border-border rounded-lg p-2.5">
+                    <code className="text-primary text-xs">{v}</code>
+                    <p className="text-xs text-slate-500 mt-0.5">{d}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Security">
+            <div className="space-y-3 text-sm text-slate-400">
+              <div className="flex gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                <span className="text-warning text-lg">⚠</span>
+                <p>Webhook URLs are <strong className="text-white">public by path</strong>. Anyone who knows the URL can trigger the flow.</p>
+              </div>
+              <ul className="space-y-2 list-disc list-inside text-slate-400">
+                <li>Keep flow IDs out of public repos</li>
+                <li>Add a secret field in payload and check with a <strong className="text-white">Condition</strong> node</li>
+                <li>Disable flows you are not actively using</li>
+                <li>Rate limiting: 300 requests/min per IP applies globally</li>
+              </ul>
+              <CodeBlock lang="flow tip" code={`// Condition node to verify secret:\nvariable: webhookPayload.secret\noperator: equals\nvalue:    my_secret_token`} />
+            </div>
+          </Panel>
+
+          <Panel title="Webhook Format">
+            <CodeBlock lang="http" code={`POST /api/webhook/:flowId\nContent-Type: application/json\n\n{\n  "sender": "923001234567@s.whatsapp.net",\n  "message": "Hello",\n  "customField": "anything"\n}`} />
+            <p className="text-xs text-slate-500 mt-3">Response: <code className="text-success">{'200 { "success": true }'}</code></p>
+          </Panel>
+        </div>
+      </div>
     </Page>
   );
 };
 
+const METHOD_COLOR = { GET: 'text-emerald-400', POST: 'text-blue-400', PUT: 'text-amber-400', PATCH: 'text-orange-400', DELETE: 'text-red-400' };
+const API_CATEGORIES = [
+  {
+    title: 'Authentication',
+    endpoints: [
+      { method: 'POST', route: '/api/auth/login', description: 'Login with username + password → returns JWT token', request: '{ "username": "admin", "password": "changeme" }', response: '{ "token": "eyJ..." }' },
+      { method: 'GET',  route: '/api/auth/me',    description: 'Get current authenticated user info', response: '{ "username": "admin" }' },
+    ]
+  },
+  {
+    title: 'Flows',
+    endpoints: [
+      { method: 'GET',    route: '/api/flows',              description: 'List all flows' },
+      { method: 'POST',   route: '/api/flows',              description: 'Create a new flow', request: '{ "name": "My Flow", "nodes": "[]", "edges": "[]", "isActive": true, "sessionId": null }' },
+      { method: 'GET',    route: '/api/flows/:id',          description: 'Get flow by ID' },
+      { method: 'PUT',    route: '/api/flows/:id',          description: 'Update a flow' },
+      { method: 'DELETE', route: '/api/flows/:id',          description: 'Delete a flow' },
+      { method: 'POST',   route: '/api/flows/run/:id',      description: 'Test-run a flow with custom variables', request: '{ "variables": { "sender": "...", "message": "hi" } }', response: '{ "success": true }' },
+      { method: 'POST',   route: '/api/webhook/:flowId',    description: 'Trigger flow externally (no auth required)', request: '{ "sender": "...", "message": "..." }' },
+    ]
+  },
+  {
+    title: 'Sessions',
+    endpoints: [
+      { method: 'GET',    route: '/api/session',            description: 'List WhatsApp sessions' },
+      { method: 'POST',   route: '/api/session',            description: 'Create a new session', request: '{ "name": "My Phone", "sessionId": "mysession" }' },
+      { method: 'GET',    route: '/api/session/:id/qr',     description: 'Get current QR code for a session' },
+      { method: 'DELETE', route: '/api/session/:id',        description: 'Delete and disconnect a session' },
+      { method: 'POST',   route: '/api/session/:id/logout', description: 'Logout a session without deleting it' },
+    ]
+  },
+  {
+    title: 'Messages & Broadcast',
+    endpoints: [
+      { method: 'POST',   route: '/api/modules/messages',   description: 'Send a WhatsApp message', request: '{ "sessionId": "...", "to": "923...@s.whatsapp.net", "type": "text", "text": "Hello!" }' },
+      { method: 'GET',    route: '/api/modules/messages',   description: 'List stored messages' },
+      { method: 'GET',    route: '/api/modules/conversations', description: 'List grouped conversations' },
+      { method: 'POST',   route: '/api/modules/broadcasts', description: 'Create broadcast campaign' },
+      { method: 'POST',   route: '/api/modules/broadcasts/:id/run', description: 'Execute a broadcast campaign' },
+    ]
+  },
+  {
+    title: 'AI & Agents',
+    endpoints: [
+      { method: 'GET',    route: '/api/modules/agents',     description: 'List AI agents' },
+      { method: 'POST',   route: '/api/modules/agents',     description: 'Create AI agent', request: '{ "name": "Support Bot", "provider": "openai", "model": "gpt-4o", "systemPrompt": "..." }' },
+      { method: 'GET',    route: '/api/modules/providers',  description: 'List configured AI providers' },
+      { method: 'PUT',    route: '/api/modules/providers/:id', description: 'Update provider config / API key' },
+    ]
+  },
+  {
+    title: 'Executions & Analytics',
+    endpoints: [
+      { method: 'GET',    route: '/api/modules/executions', description: 'List recent flow executions with logs' },
+      { method: 'GET',    route: '/api/modules/analytics',  description: 'Totals and messages-per-day chart data' },
+    ]
+  },
+];
+
 export const ApiPage = () => {
   const { data } = useResource('/modules/api-docs', { endpoints: [] });
+  const baseUrl = data.baseUrl || (window.location.origin + '/api');
+  const [openSections, setOpenSections] = useState({ Authentication: true, Flows: true });
+  const toggleSection = (title) => setOpenSections(p => ({ ...p, [title]: !p[title] }));
+
+  const curlExample = (ep) => {
+    const url = `${baseUrl.replace(/\/api$/, '')}${ep.route}`;
+    const auth = `-H "Authorization: Bearer $TOKEN" \\`;
+    const body = ep.request ? `\n  -H "Content-Type: application/json" \\\n  -d '${ep.request}'` : '';
+    return `curl -X ${ep.method} "${url}" \\\n  ${auth}${body}`;
+  };
+
+  const jsExample = (ep) => {
+    const url = `${baseUrl.replace(/\/api$/, '')}${ep.route}`;
+    const body = ep.request ? `,\n  body: JSON.stringify(${ep.request})` : '';
+    return `const res = await fetch("${url}", {\n  method: "${ep.method}",\n  headers: {\n    "Authorization": "Bearer " + token,\n    "Content-Type": "application/json"\n  }${body}\n});\nconst data = await res.json();`;
+  };
+
+  const pyExample = (ep) => {
+    const url = `${baseUrl.replace(/\/api$/, '')}${ep.route}`;
+    const body = ep.request ? `, json=${ep.request}` : '';
+    return `import requests\nheaders = {"Authorization": f"Bearer {token}"}\nres = requests.${ep.method.toLowerCase()}("${url}", headers=headers${body})\nprint(res.json())`;
+  };
+
   return (
-    <Page title="REST API" description="Reference the local API endpoints exposed by this self-hosted instance." icon={Code2}>
-      <Panel title={`Base URL: ${data.baseUrl || '/api'}`}>
-        <div className="space-y-2">
-          {(data.endpoints || []).map(([method, route, description], index) => (
-            <div key={index} className="grid grid-cols-1 md:grid-cols-[180px_1fr_2fr] gap-3 bg-background border border-border rounded-lg p-3">
-              <span className="text-primary text-xs font-bold">{method}</span>
-              <code className="text-slate-200 bg-transparent p-0">{route}</code>
-              <span className="text-slate-400 text-sm">{description}</span>
+    <Page title="REST API" description="Complete reference for all endpoints exposed by this WAAI Flow instance." icon={Code2}>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5">
+        <div className="space-y-5">
+          {/* Auth section */}
+          <Panel title="Authentication">
+            <div className="space-y-4 text-sm text-slate-400">
+              <p>All endpoints except <code className="text-primary">/api/auth/login</code> and <code className="text-primary">/api/webhook/:flowId</code> require a Bearer token.</p>
+              <CodeBlock lang="step 1 — login" code={`curl -X POST "${baseUrl}/auth/login" \\\n  -H "Content-Type: application/json" \\\n  -d '{ "username": "admin", "password": "changeme" }'\n# → { "token": "eyJ..." }`} />
+              <CodeBlock lang="step 2 — use token" code={`export TOKEN="eyJ..."\ncurl "${baseUrl}/flows" \\\n  -H "Authorization: Bearer $TOKEN"`} />
             </div>
+          </Panel>
+
+          {/* Endpoint categories */}
+          {API_CATEGORIES.map((cat) => (
+            <Panel key={cat.title}>
+              <button onClick={() => toggleSection(cat.title)} className="w-full flex items-center justify-between gap-2 mb-1 group">
+                <h2 className="text-base font-semibold text-white">{cat.title}</h2>
+                <ChevronRight size={15} className={`text-slate-500 transition ${openSections[cat.title] ? 'rotate-90' : ''}`} />
+              </button>
+              {openSections[cat.title] && (
+                <div className="space-y-3 mt-4">
+                  {cat.endpoints.map((ep, i) => (
+                    <details key={i} className="group bg-background border border-border rounded-xl overflow-hidden">
+                      <summary className="grid grid-cols-[70px_1fr] md:grid-cols-[70px_1fr_2fr] gap-3 items-center p-3 cursor-pointer list-none hover:bg-surface/40 transition">
+                        <span className={`text-xs font-bold ${METHOD_COLOR[ep.method] || 'text-slate-400'}`}>{ep.method}</span>
+                        <code className="text-slate-200 text-xs">{ep.route}</code>
+                        <span className="text-slate-500 text-sm hidden md:block">{ep.description}</span>
+                      </summary>
+                      <div className="border-t border-border p-4 space-y-3">
+                        <p className="text-sm text-slate-400 md:hidden">{ep.description}</p>
+                        {ep.request && (
+                          <>
+                            <div className="text-[10px] uppercase text-slate-500 tracking-wider">Request Body</div>
+                            <CodeBlock lang="json" code={ep.request} />
+                          </>
+                        )}
+                        {ep.response && (
+                          <>
+                            <div className="text-[10px] uppercase text-slate-500 tracking-wider">Response</div>
+                            <CodeBlock lang="json" code={ep.response} />
+                          </>
+                        )}
+                        <div className="text-[10px] uppercase text-slate-500 tracking-wider mt-4">Examples</div>
+                        <CodeBlock lang="curl" code={curlExample(ep)} />
+                        <CodeBlock lang="javascript" code={jsExample(ep)} />
+                        <CodeBlock lang="python" code={pyExample(ep)} />
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
+            </Panel>
           ))}
         </div>
-      </Panel>
+
+        {/* Right sidebar */}
+        <div className="space-y-5">
+          <Panel title="Base URL">
+            <CodeBlock lang="url" code={baseUrl} />
+            <p className="text-xs text-slate-500 mt-3">Self-hosted — this is <strong className="text-white">your</strong> instance URL.</p>
+          </Panel>
+
+          <Panel title="Rate Limits">
+            <div className="space-y-2 text-sm text-slate-400">
+              <div className="bg-background border border-border rounded-lg p-3">
+                <div className="text-white font-medium">Auth endpoints</div>
+                <div className="text-xs mt-1">20 requests / 15 minutes per IP</div>
+              </div>
+              <div className="bg-background border border-border rounded-lg p-3">
+                <div className="text-white font-medium">All other /api routes</div>
+                <div className="text-xs mt-1">300 requests / 60 seconds per IP</div>
+              </div>
+              <p className="text-xs text-slate-600">Returns <code className="text-warning">429 Too Many Requests</code> when exceeded.</p>
+            </div>
+          </Panel>
+
+          <Panel title="Error Format">
+            <CodeBlock lang="json" code={`// All errors return:\n{\n  "error": "Human-readable message"\n}\n\n// Common status codes:\n// 400 Bad Request\n// 401 Unauthorized\n// 404 Not Found\n// 429 Rate Limited\n// 500 Internal Error`} />
+          </Panel>
+
+          <Panel title="Socket.IO Events">
+            <div className="space-y-2 text-xs text-slate-400">
+              <p>Connect to <code className="text-primary">ws://host</code> with <code className="text-slate-300">auth: {'{ token }'}</code>.</p>
+              {[
+                ['qr', 'QR code PNG base64 for a session'],
+                ['session-status', 'Session connected/disconnected events'],
+                ['flow-log', 'Real-time node execution events'],
+              ].map(([ev, desc]) => (
+                <div key={ev} className="bg-background border border-border rounded-lg p-2.5">
+                  <code className="text-amber-400">{ev}</code>
+                  <p className="text-slate-500 mt-0.5">{desc}</p>
+                </div>
+              ))}
+              <CodeBlock lang="javascript" code={`import { io } from "socket.io-client";\nconst sock = io(BASE_URL, { auth: { token } });\nsock.on("flow-log", (log) => console.log(log));`} />
+            </div>
+          </Panel>
+        </div>
+      </div>
     </Page>
   );
 };
@@ -594,13 +889,17 @@ export const SettingsPage = () => {
   const [form, setForm] = useState({ appName: '', defaultTimezone: '', retentionDays: '30' });
   useEffect(() => {
     setForm({
-      appName: data.appName || 'WAAI Flow',
-      defaultTimezone: data.defaultTimezone || 'UTC',
-      retentionDays: data.retentionDays || '30'
+      appName: data['app.name'] || data.appName || 'WAAI Flow',
+      defaultTimezone: data['app.timezone'] || data.defaultTimezone || 'UTC',
+      retentionDays: data['app.retentionDays'] || data.retentionDays || '30'
     });
   }, [data]);
   const save = async () => {
-    await api.put('/modules/settings', form);
+    await api.put('/modules/settings', {
+      'app.name': form.appName,
+      'app.timezone': form.defaultTimezone,
+      'app.retentionDays': form.retentionDays
+    });
     load();
   };
   return (

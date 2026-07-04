@@ -1,35 +1,15 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Phone, 
-  GitBranch, 
-  Bot, 
-  Play, 
-  MessageSquare, 
-  MessagesSquare, 
-  Megaphone, 
-  Webhook, 
-  Code2, 
-  Cpu, 
-  Puzzle, 
-  Folder, 
-  BarChart2,
-  Settings,
-  Globe,
-  FileText,
-  Search,
-  Bell,
-  Moon,
-  Sun,
-  LogOut,
-  ChevronDown,
-  X,
-  Menu,
-  BotMessageSquare
+import {
+  LayoutDashboard, Phone, GitBranch, Bot, Play, MessageSquare, MessagesSquare,
+  Megaphone, Webhook, Code2, Cpu, Puzzle, Folder, BarChart2, Settings, Globe,
+  FileText, Search, Moon, Sun, LogOut, ChevronDown, Menu, BotMessageSquare
 } from 'lucide-react';
+import { io } from 'socket.io-client';
 import { useAuth } from '../auth';
 import { useTheme } from '../theme';
+import { SOCKET_URL } from '../config';
+import api from '../api';
 
 const SidebarItem = ({ icon: Icon, label, to, active, badge }) => {
   return (
@@ -104,10 +84,7 @@ const Sidebar = () => {
 
       {/* Bottom Status Card */}
       <div className="p-4 border-t border-border mt-auto">
-        <div className="bg-background border border-border rounded-xl p-3 relative group cursor-pointer hover:border-slate-700 transition">
-          <button className="absolute right-2 top-2 text-slate-500 hover:text-slate-300">
-            <X size={14} />
-          </button>
+        <div className="bg-background border border-border rounded-xl p-3 group cursor-pointer hover:border-slate-700 transition">
           <div className="flex items-center space-x-3">
             <div className="w-2.5 h-2.5 rounded-full bg-success ring-4 ring-success/20 animate-pulse"></div>
           <div>
@@ -124,58 +101,67 @@ const Sidebar = () => {
 const Topbar = () => {
   const auth = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [connectedCount, setConnectedCount] = useState(0);
+
+  useEffect(() => {
+    api.get('/session').then(r => {
+      setConnectedCount(r.data.filter(s => s.status === 'CONNECTED').length);
+    }).catch(() => {});
+
+    const sock = io(SOCKET_URL, { auth: { token: localStorage.getItem('waai.auth.token') } });
+    const onStatus = () => {
+      api.get('/session').then(r => {
+        setConnectedCount(r.data.filter(s => s.status === 'CONNECTED').length);
+      }).catch(() => {});
+    };
+    sock.on('status', onStatus);
+    return () => { sock.off('status', onStatus); sock.disconnect(); };
+  }, []);
+
+  const waStatus = connectedCount > 0;
 
   return (
     <div className="h-16 bg-surface border-b border-border flex items-center justify-between px-6 shrink-0">
       <div className="flex items-center">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search anything..." 
-            className="bg-background border border-border text-sm text-slate-200 rounded-lg pl-9 pr-12 py-2 w-72 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition placeholder:text-slate-500"
+          <input
+            type="text"
+            placeholder="Search anything..."
+            className="bg-background border border-border text-sm text-slate-200 rounded-lg pl-9 pr-4 py-2 w-64 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition placeholder:text-slate-500"
           />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-1">
-            <kbd className="bg-surface text-slate-400 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border">⌘</kbd>
-            <kbd className="bg-surface text-slate-400 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border">K</kbd>
-          </div>
         </div>
       </div>
 
       <div className="flex items-center space-x-5">
-        <div className="flex items-center space-x-2 cursor-pointer group">
-          <div className="w-2 h-2 rounded-full bg-success"></div>
+        <Link to="/sessions" className="flex items-center space-x-2 group">
+          <div className={`w-2 h-2 rounded-full ${waStatus ? 'bg-success animate-pulse' : 'bg-slate-600'}`} />
           <div className="flex flex-col">
-            <span className="text-xs font-medium text-slate-200 group-hover:text-white transition">WhatsApp Ready</span>
-            <span className="text-[10px] text-slate-500">Live workspace</span>
+            <span className="text-xs font-medium text-slate-200 group-hover:text-white transition">
+              {waStatus ? `${connectedCount} Connected` : 'No Sessions'}
+            </span>
+            <span className="text-[10px] text-slate-500">WhatsApp</span>
           </div>
           <ChevronDown size={14} className="text-slate-500 group-hover:text-slate-300 ml-1" />
-        </div>
+        </Link>
 
-        <div className="h-5 w-px bg-border"></div>
-
-        <button className="relative text-slate-400 hover:text-white transition">
-          <Bell size={18} />
-          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-primary text-[9px] font-bold text-white flex items-center justify-center rounded-full border border-surface">
-            3
-          </span>
-        </button>
+        <div className="h-5 w-px bg-border" />
 
         <button onClick={toggleTheme} className="text-slate-400 hover:text-white transition" title="Toggle theme">
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
-        <div className="h-5 w-px bg-border"></div>
+        <div className="h-5 w-px bg-border" />
 
-        <div className="flex items-center space-x-3 cursor-pointer group">
-          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center overflow-hidden">
-            <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Admin&backgroundColor=transparent" alt="Admin" className="w-full h-full object-cover" />
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-sm">
+            {(auth.user?.username || 'A')[0].toUpperCase()}
           </div>
-          <div className="flex flex-col hidden sm:flex">
-            <span className="text-xs font-medium text-white">Admin</span>
-            <span className="text-[10px] text-slate-400">{auth.user?.username || 'Owner'}</span>
+          <div className="hidden sm:flex flex-col">
+            <span className="text-xs font-medium text-white">{auth.user?.username || 'Admin'}</span>
+            <span className="text-[10px] text-slate-400">Owner</span>
           </div>
-          <button onClick={auth.logout} className="text-slate-500 group-hover:text-slate-300" title="Sign out">
+          <button onClick={auth.logout} className="text-slate-500 hover:text-white" title="Sign out">
             <LogOut size={14} />
           </button>
         </div>

@@ -13,7 +13,7 @@ export default {
     sessionId: ""
   },
   async execute(ctx, data) {
-    const sessionId = data.sessionId || ctx.flow.Session?.sessionId || ctx.flow.sessionKey || ctx.flow.sessionId;
+    const sessionId = data.sessionId || ctx.flow.Session?.sessionId;
     const text = renderFlowTemplate(data.text || '', ctx.variables);
 
     // Determine recipient: from context (webhook or trigger) or static data

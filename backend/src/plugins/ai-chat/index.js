@@ -34,7 +34,11 @@ export default {
         ai = new OpenAIProvider({ model });
     }
 
-    const aiResponse = await ai.chat([{ role: 'user', content: prompt }]);
+    const messages = [];
+    const systemPrompt = renderFlowTemplate(data.systemPrompt || '', ctx.variables);
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    messages.push({ role: 'user', content: prompt });
+    const aiResponse = await ai.chat(messages);
 
     ctx.variables = { ...ctx.variables, aiResponse };
     return ctx;

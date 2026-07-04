@@ -101,16 +101,16 @@ class FlowEngine {
     const plugin = pluginLoader.getPlugin(pluginType);
     if (plugin && typeof plugin.execute === 'function') {
       try {
-        io.emit('flow-log', { flowId: ctx.flow.id, node: currentNode.id, status: 'RUNNING' });
+        io.emit('flow-log', { flowId: ctx.flow.id, node: currentNode.id, plugin: pluginType, status: 'RUNNING' });
         await ctx.pushExecutionLog?.({ node: currentNode.id, plugin: pluginType, status: 'RUNNING' });
-        
+
         ctx = await plugin.execute(ctx, currentNode.data);
-        
-        io.emit('flow-log', { flowId: ctx.flow.id, node: currentNode.id, status: 'COMPLETED' });
+
+        io.emit('flow-log', { flowId: ctx.flow.id, node: currentNode.id, plugin: pluginType, status: 'COMPLETED' });
         await ctx.pushExecutionLog?.({ node: currentNode.id, plugin: pluginType, status: 'COMPLETED' });
       } catch (err) {
         logger.error(`Node ${currentNode.id} failed:`, err);
-        io.emit('flow-log', { flowId: ctx.flow.id, node: currentNode.id, status: 'FAILED', error: err.message });
+        io.emit('flow-log', { flowId: ctx.flow.id, node: currentNode.id, plugin: pluginType, status: 'FAILED', error: err.message });
         await ctx.pushExecutionLog?.({ node: currentNode.id, plugin: pluginType, status: 'FAILED', error: err.message });
         ctx.failed = true;
         ctx.error = err.message;
@@ -124,12 +124,11 @@ class FlowEngine {
     // Simple linear traversal (or branching if plugin modifies ctx.nextEdge)
     const outgoingEdges = allEdges.filter(e => e.source === currentNode.id);
     
-    for (const edge of outgoingEdges) {
-      // In advanced logic (like IF node), the plugin sets which handle to follow
-      if (ctx.nextNodeHandle && edge.sourceHandle !== ctx.nextNodeHandle) {
-        continue;
-      }
+    const handleFilter = ctx.nextNodeHandle;
+    ctx.nextNodeHandle = null; // Reset so branching doesn't leak into child nodes
 
+    for (const edge of outgoingEdges) {
+      if (handleFilter && edge.sourceHandle !== handleFilter) continue;
       const nextNode = allNodes.find(n => n.id === edge.target);
       await this.traverse(nextNode, allNodes, allEdges, ctx);
       if (ctx.failed) return;

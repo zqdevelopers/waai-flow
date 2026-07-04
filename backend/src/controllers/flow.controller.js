@@ -33,6 +33,20 @@ export const getFlows = async (req, res) => {
   }
 };
 
+export const getFlow = async (req, res) => {
+  try {
+    const flow = await prisma.flow.findUnique({
+      where: { id: req.params.id },
+      include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } }
+    });
+    if (!flow) return res.status(404).json({ error: 'Flow not found' });
+    res.json(flow);
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to fetch flow' });
+  }
+};
+
 export const createFlow = async (req, res) => {
   const { name, description, nodes, edges, isActive, sessionId } = req.body;
   try {
