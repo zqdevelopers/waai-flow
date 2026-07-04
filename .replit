@@ -1,0 +1,7 @@
+entrypoint = "backend/src/app.js"
+run = "npm run render:start"
+
+[deployment]
+build = "npm run render:build"
+run = "npm run render:start"
+deploymentTarget = "cloudrun"

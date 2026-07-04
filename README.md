@@ -165,6 +165,35 @@ After deploy, open the Render URL and log in with your admin credentials.
 
 Free Render services can run WAAI Flow for demos, but their local filesystem is not durable. That means SQLite data, uploaded files, and WhatsApp session files can be lost after restarts or redeploys. For a real public instance, use a paid Render service with a persistent disk and set `DATA_DIR` to the disk mount path, or migrate the app database to a managed database.
 
+## Deploy On Replit
+
+This repo includes `.replit` for Replit deployments. The same one-service production mode is used: Express serves the API and the built React dashboard.
+
+1. In Replit, choose **Create App** -> **Import from GitHub**.
+2. Import `https://github.com/zqdevelopers/waai-flow`.
+3. Open **Secrets** and add:
+
+```env
+DATABASE_URL=file:./dev.db
+ADMIN_USERNAME=your-admin-user
+ADMIN_PASSWORD=your-strong-password
+AUTH_SECRET=your-long-random-secret
+AUTH_TOKEN_TTL_MS=86400000
+PROJECT_OWNER_NAME=ZQ Developers
+PROJECT_SUPPORT_WHATSAPP=+923144916432
+```
+
+4. Open the Shell and run once:
+
+```bash
+npm run render:build
+```
+
+5. Click **Run** to test the app.
+6. Click **Publish** and choose an **Autoscale** or **Reserved VM** deployment.
+
+For WAAI Flow, **Reserved VM** is the better Replit option if you want WhatsApp sessions to stay connected. Autoscale can idle and restart, which may disconnect WhatsApp sessions. Replit's built-in SQL database is PostgreSQL, while this project currently uses SQLite, so keep `DATABASE_URL=file:./dev.db` unless you migrate the Prisma schema to PostgreSQL.
+
 ## GitHub Upload Checklist
 
 Before pushing:
