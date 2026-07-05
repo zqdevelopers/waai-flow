@@ -20,6 +20,8 @@ export class OpenAIProvider extends AIProvider {
       }
     );
 
-    return response.data.choices[0].message.content;
+    const choice = response.data.choices?.[0];
+    if (!choice) throw new Error('OpenAI returned no choices');
+    return choice.message.content ?? '';
   }
 }

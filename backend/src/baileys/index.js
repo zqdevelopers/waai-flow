@@ -57,7 +57,7 @@ class BaileysService {
     });
     for (const session of activeSessions) {
       logger.info(`Rehydrating session: ${session.sessionId}`);
-      this.startSession(session.sessionId);
+      this.startSession(session.sessionId).catch(err => logger.error(`Failed to rehydrate session ${session.sessionId}:`, err));
     }
   }
 
@@ -96,7 +96,7 @@ class BaileysService {
       if (qr) {
         this.qrCache.set(sessionId, qr);
         io.emit(`qr-${sessionId}`, { qr });
-        io.emit('qr', { sessionId, qr }); // Global event
+        io.emit('qr', { sessionId, qr });
         qrcode.generate(qr, { small: true });
       }
 

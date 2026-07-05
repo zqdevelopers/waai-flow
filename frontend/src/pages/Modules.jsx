@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bot, Play, MessageSquare, MessagesSquare, Megaphone, Webhook, Code2,
   Cpu, Puzzle, Folder, BarChart2, Settings, Globe, FileText, Plus, Trash2,
@@ -417,6 +417,13 @@ export const MessagesPage = () => {
   );
 };
 
+const TabBtn = ({ id, label, active, onClick }) => (
+  <button onClick={onClick}
+    className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${active ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>
+    {label}
+  </button>
+);
+
 export const BroadcastPage = () => {
   const { data: broadcasts, load } = useResource('/modules/broadcasts');
   const sessions = useSessions();
@@ -433,11 +440,11 @@ export const BroadcastPage = () => {
   [form.recipients]);
 
   useEffect(() => {
-    const hasRunning = broadcasts.some(b => b.status === 'RUNNING');
-    if (!hasRunning) return;
-    const t = setInterval(load, 3000);
+    const t = setInterval(() => {
+      if (broadcasts.some(b => b.status === 'RUNNING')) load();
+    }, 3000);
     return () => clearInterval(t);
-  }, [broadcasts]);
+  }, [broadcasts.length]);
 
   useEffect(() => {
     if (selected) setSelected(broadcasts.find(b => b.id === selected.id) || null);
@@ -477,13 +484,6 @@ export const BroadcastPage = () => {
     return { ok: r.filter(x => x.success).length, fail: r.filter(x => !x.success).length, total: r.length };
   };
 
-  const TabBtn = ({ id, label }) => (
-    <button onClick={() => setTab(id)}
-      className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${tab === id ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>
-      {label}
-    </button>
-  );
-
   return (
     <Page title="Broadcast" description="Send bulk WhatsApp messages to multiple contacts at once." icon={Megaphone}
       actions={<Button variant="secondary" onClick={load}><RefreshCw size={16} /> Refresh</Button>}>
@@ -492,8 +492,8 @@ export const BroadcastPage = () => {
         <div className="space-y-5">
           <Panel>
             <div className="flex gap-1 bg-background rounded-lg p-1 mb-5">
-              <TabBtn id="compose" label="✏️ Compose" />
-              <TabBtn id="preview" label="👁️ Preview" />
+              <TabBtn id="compose" label="✏️ Compose" active={tab === 'compose'} onClick={() => setTab('compose')} />
+              <TabBtn id="preview" label="👁️ Preview" active={tab === 'preview'} onClick={() => setTab('preview')} />
             </div>
 
             {error && (

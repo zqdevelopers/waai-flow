@@ -453,6 +453,7 @@ export const runBroadcast = async (req, res) => {
   } catch (error) {
     logger.error(error);
     await prisma.broadcast.update({ where: { id: req.params.id }, data: { status: 'FAILED' } }).catch(() => {});
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to run broadcast' });
   }
 };
 

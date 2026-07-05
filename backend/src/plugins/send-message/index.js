@@ -1,6 +1,6 @@
 import { renderFlowTemplate } from '../../flow/template.js';
 
-const tpl = (v, vars) => renderFlowTemplate(String(v || ''), vars);
+const tpl = (v, vars) => renderFlowTemplate(String(v ?? ''), vars);
 
 export default {
   type: "send_message",
