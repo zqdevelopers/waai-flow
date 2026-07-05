@@ -24,5 +24,5 @@ RUN npx prisma generate
 # Expose port
 EXPOSE 3000
 
-# Start via PM2
-CMD ["pm2-runtime", "src/app.js"]
+# Push schema to DB on startup, then start via PM2
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && pm2-runtime src/app.js"]

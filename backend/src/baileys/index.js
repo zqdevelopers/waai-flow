@@ -80,7 +80,7 @@ class BaileysService {
       version,
       auth: state,
       printQRInTerminal: false,
-      logger: logger.child({ level: 'silent' }), // Suppress baileys internal logs or set to info
+      logger: logger.child({ level: 'silent' }),
       browser: Browsers.macOS('Desktop')
     });
 

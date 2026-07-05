@@ -745,7 +745,7 @@ export const WebhooksPage = () => {
     setTestResult({ [item.id]: { loading: true } });
     try {
       let body = {};
-      try { body = JSON.parse(testBody); } catch { /* ignore */ }
+      try { body = JSON.parse(testBody); } catch {}
       const res = await fetch(fullUrl(item.url), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -15,7 +15,7 @@ export default {
     if (!url) throw new Error('HTTP Request: url is required');
 
     let headers = {};
-    try { headers = JSON.parse(renderFlowTemplate(data.headers || '{}', ctx.variables)); } catch { /* use empty */ }
+    try { headers = JSON.parse(renderFlowTemplate(data.headers || '{}', ctx.variables)); } catch {}
 
     let body;
     if (data.body) {

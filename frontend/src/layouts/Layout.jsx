@@ -53,7 +53,6 @@ const Sidebar = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-        {/* Main Menu */}
         <div className="space-y-1">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" to="/" active={path === '/'} />
           <SidebarItem icon={Phone} label="WhatsApp Sessions" to="/sessions" active={path === '/sessions'} />
@@ -71,7 +70,6 @@ const Sidebar = () => {
           <SidebarItem icon={BarChart2} label="Analytics" to="/analytics" active={path === '/analytics'} />
         </div>
 
-        {/* System Menu */}
         <div>
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-3">System</div>
           <div className="space-y-1">
@@ -82,7 +80,6 @@ const Sidebar = () => {
         </div>
       </div>
 
-      {/* Bottom Status Card */}
       <div className="p-4 border-t border-border mt-auto">
         <div className="bg-background border border-border rounded-xl p-3 group cursor-pointer hover:border-slate-700 transition">
           <div className="flex items-center space-x-3">

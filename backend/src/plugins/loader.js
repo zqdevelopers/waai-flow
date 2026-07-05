@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import { logger } from '../app.js';
 import { prisma } from '../database/index.js';
 
@@ -20,7 +21,6 @@ class PluginLoader {
       try {
         const pluginPath = path.join(pluginsDir, dir, 'index.js');
         if (fs.existsSync(pluginPath)) {
-          const { pathToFileURL } = await import('url');
           const fileUrl = pathToFileURL(pluginPath).href;
           const { default: plugin } = await import(fileUrl);
           

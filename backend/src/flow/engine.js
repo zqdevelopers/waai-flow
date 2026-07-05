@@ -118,7 +118,7 @@ class FlowEngine {
     const outgoingEdges = allEdges.filter(e => e.source === currentNode.id);
     
     const handleFilter = ctx.nextNodeHandle;
-    ctx.nextNodeHandle = null; // Reset so branching doesn't leak into child nodes
+    ctx.nextNodeHandle = null;
 
     for (const edge of outgoingEdges) {
       if (handleFilter && edge.sourceHandle !== handleFilter) continue;
