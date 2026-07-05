@@ -9,6 +9,9 @@ RUN npm install -g pm2
 # Copy package files
 COPY backend/package*.json ./
 
+# Install OpenSSL so Prisma can detect version and use the correct engine binary
+RUN apk add --no-cache openssl
+
 # Install dependencies
 RUN npm install
 
