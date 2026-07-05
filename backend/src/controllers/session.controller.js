@@ -33,7 +33,6 @@ export const reconnectSession = async (req, res) => {
     const session = await prisma.session.findUnique({ where: { id } });
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    // Stop existing connection if any, then restart
     await baileyService.stopSession(session.sessionId).catch(() => {});
     await prisma.session.update({ where: { id }, data: { status: 'CONNECTING' } });
     baileyService.startSession(session.sessionId);
@@ -61,7 +60,6 @@ export const createSession = async (req, res) => {
       data: { sessionId, name, status: 'CONNECTING' }
     });
 
-    // Start WhatsApp connection
     baileyService.startSession(sessionId);
 
     res.json(session);
@@ -77,7 +75,6 @@ export const deleteSession = async (req, res) => {
     const session = await prisma.session.findUnique({ where: { id } });
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    // Stop WhatsApp connection and detach flows before deleting the session.
     await baileyService.stopSession(session.sessionId);
     await prisma.flow.updateMany({
       where: { sessionId: id },

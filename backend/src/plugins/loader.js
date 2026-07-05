@@ -20,7 +20,6 @@ class PluginLoader {
       try {
         const pluginPath = path.join(pluginsDir, dir, 'index.js');
         if (fs.existsSync(pluginPath)) {
-          // Dynamic import
           const { pathToFileURL } = await import('url');
           const fileUrl = pathToFileURL(pluginPath).href;
           const { default: plugin } = await import(fileUrl);
@@ -28,10 +27,9 @@ class PluginLoader {
           if (plugin && plugin.type && plugin.name) {
             this.plugins.set(plugin.type, plugin);
             
-            // Sync with DB
             await prisma.plugin.upsert({
               where: { name: plugin.name },
-              update: { description: plugin.category }, // simplify metadata
+              update: { description: plugin.category },
               create: {
                 name: plugin.name,
                 description: plugin.category,

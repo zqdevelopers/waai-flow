@@ -8,7 +8,6 @@ export default {
   config: {},
   async execute(ctx, data) {
     ctx.logger.info(`Webhook Trigger executed for flow ${ctx.flow.id}`);
-    // Context already contains webhookPayload populated by the controller
     return ctx;
   }
 }

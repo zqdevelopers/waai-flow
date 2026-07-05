@@ -20,12 +20,10 @@ export const handleWebhook = async (req, res) => {
       return res.status(404).json({ error: 'Flow not found or inactive' });
     }
 
-    // Find the webhook_trigger node to read its config
     let nodes = [];
     try { nodes = JSON.parse(flow.nodes || '[]'); } catch {}
     const triggerNode = nodes.find(n => n.type === 'webhook_trigger');
 
-    // Validate secret if configured
     if (triggerNode?.data?.secret) {
       const incoming = req.headers['x-webhook-secret'];
       if (!incoming || incoming !== triggerNode.data.secret) {
@@ -33,7 +31,6 @@ export const handleWebhook = async (req, res) => {
       }
     }
 
-    // Build base context: spread top-level payload fields + keep webhookPayload for dot-notation
     const ctx = {
       ...payload,
       webhookPayload: payload,
@@ -42,7 +39,6 @@ export const handleWebhook = async (req, res) => {
       messageId: payload.messageId || '',
     };
 
-    // Apply variable mappings defined on the trigger node
     if (triggerNode?.data?.variableMappings) {
       try {
         const mappings = JSON.parse(triggerNode.data.variableMappings);
@@ -52,9 +48,7 @@ export const handleWebhook = async (req, res) => {
             if (val !== undefined) ctx[varName] = val;
           }
         }
-      } catch {
-        // Malformed JSON — skip mappings silently
-      }
+      } catch {}
     }
 
     const result = await flowEngine.execute(flow, ctx);

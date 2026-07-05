@@ -47,7 +47,6 @@ const timingSafeEqual = (a, b) => {
   const bufA = Buffer.from(String(a));
   const bufB = Buffer.from(String(b));
   if (bufA.length !== bufB.length) {
-    // Still compare to avoid length-based timing leak, then return false
     crypto.timingSafeEqual(bufA, Buffer.alloc(bufA.length));
     return false;
   }

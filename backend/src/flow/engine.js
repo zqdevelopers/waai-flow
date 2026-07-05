@@ -2,7 +2,6 @@ import { logger, io } from '../app.js';
 import { pluginLoader } from '../plugins/loader.js';
 import { prisma } from '../database/index.js';
 import { baileyService } from '../baileys/index.js';
-// AI providers will be injected later
 
 class FlowEngine {
   getNodePluginType(node) {
@@ -46,7 +45,6 @@ class FlowEngine {
       const nodes = JSON.parse(flow.nodes || '[]');
       const edges = JSON.parse(flow.edges || '[]');
       
-      // Find trigger node(s)
       const triggerNodes = nodes.filter((node) => {
         const pluginType = this.getNodePluginType(node);
         return pluginType?.includes('trigger') || pluginLoader.getPlugin(pluginType)?.category === 'Triggers';
@@ -59,13 +57,11 @@ class FlowEngine {
         return { success: false, reason: 'No trigger node found' };
       }
 
-      // We use the first trigger for now
       const startNode = triggerNodes[0];
       const contextVariables = initialContext.variables && typeof initialContext.variables === 'object'
         ? initialContext.variables
         : initialContext;
       
-      // Build base context
       const ctx = {
         flow,
         whatsapp: baileyService,
@@ -96,7 +92,6 @@ class FlowEngine {
   async traverse(currentNode, allNodes, allEdges, ctx) {
     if (!currentNode) return;
     
-    // Execute current node
     const pluginType = this.getNodePluginType(currentNode);
     const plugin = pluginLoader.getPlugin(pluginType);
     if (plugin && typeof plugin.execute === 'function') {
@@ -114,14 +109,12 @@ class FlowEngine {
         await ctx.pushExecutionLog?.({ node: currentNode.id, plugin: pluginType, status: 'FAILED', error: err.message });
         ctx.failed = true;
         ctx.error = err.message;
-        return; // Stop execution on error
+        return;
       }
     } else {
       logger.warn(`Plugin ${pluginType} not found or not executable.`);
     }
 
-    // Find next nodes
-    // Simple linear traversal (or branching if plugin modifies ctx.nextEdge)
     const outgoingEdges = allEdges.filter(e => e.source === currentNode.id);
     
     const handleFilter = ctx.nextNodeHandle;

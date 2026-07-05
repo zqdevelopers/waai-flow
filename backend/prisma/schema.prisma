@@ -73,6 +73,7 @@ model Broadcast {
   sessionId  String?
   recipients String   // JSON array of WhatsApp JIDs
   text       String
+  delayMs    Int      @default(1000)
   status     String   @default("DRAFT") // DRAFT, RUNNING, COMPLETED, FAILED
   result     String?  // JSON execution result
   createdAt  DateTime @default(now())

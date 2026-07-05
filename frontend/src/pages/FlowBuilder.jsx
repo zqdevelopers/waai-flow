@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+﻿import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow, MiniMap, Controls, Background,
   useNodesState, useEdgesState, addEdge,
@@ -14,7 +14,6 @@ import { io } from 'socket.io-client';
 import api from '../api';
 import { SOCKET_URL } from '../config';
 
-// ─── Node metadata ────────────────────────────────────────────────────────────
 const NODE_DEFS = {
   webhook_trigger: { label: 'Webhook Trigger', color: '#3B82F6', Icon: Zap,            category: 'Triggers',     desc: 'Starts flow via HTTP POST' },
   send_message:    { label: 'Send Message',    color: '#25D366', Icon: MessageSquare,   category: 'WhatsApp',     desc: 'Send WhatsApp message' },
@@ -27,7 +26,6 @@ const NODE_DEFS = {
 };
 const CATEGORIES = ['Triggers', 'WhatsApp', 'AI', 'Logic', 'Integrations'];
 
-// ─── Shared node shell ────────────────────────────────────────────────────────
 const NodeShell = ({ nodeType, selected, children, bottomHandles, noTargetHandle }) => {
   const def = NODE_DEFS[nodeType] || {};
   const { Icon = Zap, color = '#64748b', label = nodeType } = def;
@@ -52,7 +50,6 @@ const NodeShell = ({ nodeType, selected, children, bottomHandles, noTargetHandle
   );
 };
 
-// ─── Custom node components ────────────���──────────────────────────────────────
 const WebhookTriggerNode = ({ data, selected }) => (
   <NodeShell nodeType="webhook_trigger" selected={selected} noTargetHandle>
     <div className="text-blue-400 font-mono text-[10px]">POST /api/webhook/…</div>
@@ -79,8 +76,7 @@ const SendMessageNode = ({ data, selected }) => {
   );
 };
 
-// ─── Shared UI helpers for dynamic arrays ─────────────────────────────────────
-const listInputCls = 'w-full bg-[#060f0c] border border-[#1a3028] text-slate-200 text-xs rounded p-1.5 outline-none focus:border-primary/50 placeholder:text-slate-600';
+const listInputCls ='w-full bg-[#060f0c] border border-[#1a3028] text-slate-200 text-xs rounded p-1.5 outline-none focus:border-primary/50 placeholder:text-slate-600';
 
 const StrList = ({ items = [], onChange, placeholder = 'Item', addLabel = 'Add item' }) => (
   <div>
@@ -188,13 +184,11 @@ const AiChatNode = ({ data, selected }) => (
 const ConditionNode = ({ data, selected }) => (
   <NodeShell nodeType="condition" selected={selected} bottomHandles={
     <div className="relative" style={{ height: 28 }}>
-      {/* TRUE side */}
       <div className="absolute left-0 bottom-0" style={{ width: '50%' }}>
         <div className="text-center text-[9px] text-emerald-400 font-bold pb-1">TRUE</div>
         <Handle type="source" id="true" position={Position.Bottom}
           style={{ left: '50%', borderColor: '#10B981', background: '#0B1F19', width: 12, height: 12, borderWidth: 2, transform: 'translate(-50%, 50%)' }} />
       </div>
-      {/* FALSE side */}
       <div className="absolute right-0 bottom-0" style={{ width: '50%' }}>
         <div className="text-center text-[9px] text-red-400 font-bold pb-1">FALSE</div>
         <Handle type="source" id="false" position={Position.Bottom}
@@ -244,7 +238,6 @@ const nodeTypes = {
   http_request: HttpRequestNode,
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const defaultData = (type) => {
   const label = NODE_DEFS[type]?.label || type;
   const base = { label, pluginType: type };
@@ -271,7 +264,6 @@ const INIT_EDGES = [];
 const FieldLabel = ({ children }) => <span className="text-[10px] uppercase text-slate-500 tracking-wider block mb-1">{children}</span>;
 const inputCls = 'w-full bg-background border border-border text-slate-200 text-sm rounded-lg p-2 outline-none focus:border-primary/50';
 
-// ─── FlowBuilder ──────────────────────────────────────────────────────────────
 const FlowBuilder = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(INIT_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState(INIT_EDGES);
@@ -388,7 +380,6 @@ const FlowBuilder = () => {
     setSelectedId(null);
   };
 
-  // ─── Node settings panel content per type ──────────────────────────────────
   const renderSettings = () => {
     if (!selectedNode) return null;
     const type = selectedNode.data.pluginType || selectedNode.type;
@@ -475,16 +466,13 @@ const FlowBuilder = () => {
               ['list',       '📋  Interactive List'],
             ])}
 
-            {/* ── Text ── */}
             {msgType === 'text' && ta('Message', 'text', 4, { placeholder: 'Hello {{sender}}!\n\nAI reply: {{aiResponse}}' })}
 
-            {/* ── Image / Video / GIF ── */}
             {isMedia && <>
               {field('Media URL', 'mediaUrl', { placeholder: 'https://example.com/image.jpg' })}
               {ta('Caption (optional)', 'text', 2, { placeholder: 'Caption text…' })}
             </>}
 
-            {/* ── Audio ── */}
             {msgType === 'audio' && <>
               {field('Audio URL', 'mediaUrl', { placeholder: 'https://example.com/audio.mp3' })}
               <label className="flex items-center gap-2 cursor-pointer">
@@ -493,7 +481,6 @@ const FlowBuilder = () => {
               </label>
             </>}
 
-            {/* ── Document ── */}
             {msgType === 'document' && <>
               {field('Document URL', 'mediaUrl', { placeholder: 'https://example.com/file.pdf' })}
               {field('File Name', 'fileName', { placeholder: 'document.pdf' })}
@@ -501,10 +488,8 @@ const FlowBuilder = () => {
               {ta('Caption (optional)', 'text', 2, { placeholder: 'Description…' })}
             </>}
 
-            {/* ── Sticker ── */}
             {msgType === 'sticker' && field('Sticker URL (.webp)', 'mediaUrl', { placeholder: 'https://example.com/sticker.webp' })}
 
-            {/* ── Location ── */}
             {msgType === 'location' && <>
               <div className="grid grid-cols-2 gap-2">
                 {field('Latitude', 'latitude', { type: 'number', placeholder: '24.8607' })}
@@ -514,7 +499,6 @@ const FlowBuilder = () => {
               {field('Address (optional)', 'address', { placeholder: 'Street, City' })}
             </>}
 
-            {/* ── Contact ── */}
             {msgType === 'contact' && <>
               {field('Full Name', 'contactName', { placeholder: 'John Doe' })}
               {field('Phone Number', 'contactPhone', { placeholder: '+923001234567' })}
@@ -522,7 +506,6 @@ const FlowBuilder = () => {
               {field('Organization (optional)', 'contactOrg', { placeholder: 'Company Name' })}
             </>}
 
-            {/* ── Poll ── */}
             {msgType === 'poll' && <>
               {field('Poll Question', 'pollName', { placeholder: 'What do you prefer?' })}
               <label className="block">
@@ -533,7 +516,6 @@ const FlowBuilder = () => {
               {field('Max selectable', 'selectableCount', { type: 'number', min: 1, placeholder: '1' })}
             </>}
 
-            {/* ── Quick Reply Buttons ── */}
             {msgType === 'buttons' && <>
               {ta('Message Text', 'text', 3, { placeholder: 'Please choose:' })}
               {field('Title (optional)', 'title', { placeholder: '' })}
@@ -549,7 +531,6 @@ const FlowBuilder = () => {
               </label>
             </>}
 
-            {/* ── URL Buttons ── */}
             {msgType === 'urlButtons' && <>
               {ta('Message Text', 'text', 3, { placeholder: 'Visit our website:' })}
               {field('Title (optional)', 'title', { placeholder: '' })}
@@ -565,7 +546,6 @@ const FlowBuilder = () => {
               </label>
             </>}
 
-            {/* ── Copy Code Button ── */}
             {msgType === 'copyButton' && <>
               {ta('Message Text', 'text', 3, { placeholder: 'Here is your code:' })}
               {field('Code to Copy', 'copyCode', { placeholder: 'PROMO2025' })}
@@ -573,7 +553,6 @@ const FlowBuilder = () => {
               {field('Footer (optional)', 'footer', { placeholder: '' })}
             </>}
 
-            {/* ── Interactive List ── */}
             {msgType === 'list' && <>
               {ta('Message Body', 'text', 3, { placeholder: 'Please choose from the menu:' })}
               {field('Title (optional)', 'title', { placeholder: 'Main Menu' })}
@@ -691,14 +670,12 @@ const FlowBuilder = () => {
     );
   };
 
-  // ─── Categorised palette ────────────────────────────────────────────────────
   const [openCats, setOpenCats] = useState({ Triggers: true, WhatsApp: true, AI: true, Logic: true, Integrations: true });
   const toggleCat = (cat) => setOpenCats(p => ({ ...p, [cat]: !p[cat] }));
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
 
-      {/* ── LEFT SIDEBAR ── */}
       <div className="w-[280px] bg-surface border-r border-border flex flex-col shrink-0 z-10">
         <div className="p-4 border-b border-border shrink-0">
           <button onClick={createNewFlow}
@@ -709,7 +686,6 @@ const FlowBuilder = () => {
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
 
-          {/* Saved flows */}
           <div className="p-4 border-b border-border">
             <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-2">Saved Flows</div>
             <div className="space-y-1.5">
@@ -724,7 +700,6 @@ const FlowBuilder = () => {
             </div>
           </div>
 
-          {/* Flow session */}
           <div className="p-4 border-b border-border">
             <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-2">Default Session</div>
             <select value={flowSessionId} onChange={e => setFlowSessionId(e.target.value)}
@@ -734,7 +709,6 @@ const FlowBuilder = () => {
             </select>
           </div>
 
-          {/* Node palette */}
           <div className="p-4 border-b border-border">
             <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-3">Add Nodes</div>
             {CATEGORIES.map(cat => {
@@ -763,7 +737,6 @@ const FlowBuilder = () => {
             })}
           </div>
 
-          {/* Test variables */}
           <div className="p-4">
             <div className="text-[10px] uppercase text-slate-500 font-bold tracking-wider mb-2">Test Variables</div>
             <textarea value={testVars} onChange={e => setTestVars(e.target.value)} rows={7}
@@ -773,7 +746,6 @@ const FlowBuilder = () => {
         </div>
       </div>
 
-      {/* ── MAIN CANVAS + LOG PANEL ── */}
       <div className="flex-1 flex flex-col overflow-hidden relative bg-background">
         <div className="flex-1 relative">
           <ReactFlow
@@ -788,7 +760,6 @@ const FlowBuilder = () => {
             deleteKeyCode="Delete"
             defaultEdgeOptions={{ animated: true, style: { stroke: '#25D366', strokeWidth: 2 } }}
           >
-            {/* Top-left: flow name */}
             <Panel position="top-left" className="m-4">
               <div className="bg-surface/90 backdrop-blur border border-border rounded-lg px-3 py-2 flex items-center gap-2">
                 <input value={flowName} onChange={e => setFlowName(e.target.value)}
@@ -800,7 +771,6 @@ const FlowBuilder = () => {
               </div>
             </Panel>
 
-            {/* Top-right: actions */}
             <Panel position="top-right" className="flex flex-col items-end gap-2 m-4">
               <div className="flex gap-2">
                 <button onClick={() => setFlowIsActive(v => !v)}
@@ -834,11 +804,9 @@ const FlowBuilder = () => {
             <Background variant="dots" gap={20} size={1} color="#1D3A31" />
           </ReactFlow>
 
-          {/* Node settings panel */}
           {renderSettings()}
         </div>
 
-        {/* Execution log panel */}
         {showLogs && (
           <div className="border-t border-border bg-[#06130F] shrink-0 h-52 flex flex-col">
             <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">

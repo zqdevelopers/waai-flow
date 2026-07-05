@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bot, Play, MessageSquare, MessagesSquare, Megaphone, Webhook, Code2,
   Cpu, Puzzle, Folder, BarChart2, Settings, Globe, FileText, Plus, Trash2,
@@ -73,7 +73,9 @@ const StatusPill = ({ status }) => {
     ? 'bg-success-bg text-success'
     : upper.includes('FAILED') || upper.includes('DISABLED')
       ? 'bg-danger-bg text-danger'
-      : 'bg-warning/20 text-warning';
+      : upper === 'PARTIAL'
+        ? 'bg-amber-500/20 text-amber-400'
+        : 'bg-warning/20 text-warning';
   return <span className={`inline-flex px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${cls}`}>{upper}</span>;
 };
 
@@ -418,44 +420,300 @@ export const MessagesPage = () => {
 export const BroadcastPage = () => {
   const { data: broadcasts, load } = useResource('/modules/broadcasts');
   const sessions = useSessions();
-  const [form, setForm] = useState({ name: '', sessionId: '', recipients: '', text: '' });
+  const BLANK = { name: '', sessionId: '', recipients: '', text: '', delayMs: '2000' };
+  const [form, setForm] = useState(BLANK);
+  const [tab, setTab] = useState('compose');
+  const [creating, setCreating] = useState(false);
+  const [runningId, setRunningId] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [error, setError] = useState('');
+
+  const parsedRecipients = useMemo(() =>
+    form.recipients.split(/\n|,/).map(r => r.trim()).filter(Boolean),
+  [form.recipients]);
+
+  useEffect(() => {
+    const hasRunning = broadcasts.some(b => b.status === 'RUNNING');
+    if (!hasRunning) return;
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
+  }, [broadcasts]);
+
+  useEffect(() => {
+    if (selected) setSelected(broadcasts.find(b => b.id === selected.id) || null);
+  }, [broadcasts]);
+
   const create = async () => {
-    await api.post('/modules/broadcasts', form);
-    setForm({ name: '', sessionId: '', recipients: '', text: '' });
-    load();
+    if (!form.name.trim()) { setError('Campaign name is required'); return; }
+    if (!parsedRecipients.length) { setError('Add at least one recipient'); return; }
+    if (!form.text.trim()) { setError('Message text is required'); return; }
+    setCreating(true); setError('');
+    try {
+      await api.post('/modules/broadcasts', { ...form, recipients: parsedRecipients, delayMs: parseInt(form.delayMs) || 2000 });
+      setForm(BLANK); setTab('compose'); load();
+    } catch (err) { setError(err.response?.data?.error || 'Failed to create'); }
+    finally { setCreating(false); }
   };
+
   const run = async (broadcast) => {
-    await api.post(`/modules/broadcasts/${broadcast.id}/run`);
-    load();
+    const total = broadcast.recipients.length;
+    const estSec = Math.ceil(total * (broadcast.delayMs || 2000) / 1000);
+    if (!window.confirm(`Send "${broadcast.name}" to ${total} contacts?\nEstimated time: ~${estSec}s with ${(broadcast.delayMs || 2000) / 1000}s delay`)) return;
+    setRunningId(broadcast.id); setError('');
+    try { await api.post(`/modules/broadcasts/${broadcast.id}/run`); load(); }
+    catch (err) { setError(err.response?.data?.error || 'Failed to start'); }
+    finally { setRunningId(null); }
   };
+
   const remove = async (broadcast) => {
-    await api.delete(`/modules/broadcasts/${broadcast.id}`);
+    if (!window.confirm(`Delete campaign "${broadcast.name}"?`)) return;
+    if (selected?.id === broadcast.id) setSelected(null);
+    await api.delete(`/modules/broadcasts/${broadcast.id}`).catch(() => {});
     load();
   };
+
+  const stats = (item) => {
+    const r = Array.isArray(item.result) ? item.result : [];
+    return { ok: r.filter(x => x.success).length, fail: r.filter(x => !x.success).length, total: r.length };
+  };
+
+  const TabBtn = ({ id, label }) => (
+    <button onClick={() => setTab(id)}
+      className={`flex-1 py-2 text-sm font-medium rounded-lg transition ${tab === id ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>
+      {label}
+    </button>
+  );
+
   return (
-    <Page title="Broadcast" description="Create and run bulk WhatsApp message campaigns." icon={Megaphone}>
-      <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
-        <Panel title="New Broadcast">
-          <div className="space-y-3">
-            <Input placeholder="Campaign name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <Select value={form.sessionId} onChange={(e) => setForm({ ...form, sessionId: e.target.value })}>
-              <option value="">Dry run / no sending</option>
-              {sessions.map((session) => <option key={session.id} value={session.sessionId}>{session.name}</option>)}
-            </Select>
-            <Textarea rows={5} placeholder="Recipients, one JID per line" value={form.recipients} onChange={(e) => setForm({ ...form, recipients: e.target.value })} />
-            <Textarea rows={4} placeholder="Message text" value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} />
-            <Button onClick={create} disabled={!form.name || !form.text}><Plus size={16} /> Create</Button>
-          </div>
-        </Panel>
-        <Panel title="Campaigns">
-          {broadcasts.length === 0 ? <Empty /> : <div className="space-y-3">{broadcasts.map((item) => (
-            <div key={item.id} className="bg-background border border-border rounded-lg p-4">
-              <div className="flex justify-between gap-3"><div><h3 className="text-white font-semibold">{item.name}</h3><p className="text-sm text-slate-400 mt-1">{item.text}</p></div><StatusPill status={item.status} /></div>
-              <div className="text-xs text-slate-500 mt-3">{item.recipients.length} recipients</div>
-              <div className="flex gap-2 mt-4"><Button variant="success" onClick={() => run(item)}><Play size={14} /> Run</Button><Button variant="danger" onClick={() => remove(item)}><Trash2 size={14} /> Delete</Button></div>
+    <Page title="Broadcast" description="Send bulk WhatsApp messages to multiple contacts at once." icon={Megaphone}
+      actions={<Button variant="secondary" onClick={load}><RefreshCw size={16} /> Refresh</Button>}>
+      <div className="grid grid-cols-1 xl:grid-cols-[460px_1fr] gap-6">
+
+        <div className="space-y-5">
+          <Panel>
+            <div className="flex gap-1 bg-background rounded-lg p-1 mb-5">
+              <TabBtn id="compose" label="✏️ Compose" />
+              <TabBtn id="preview" label="👁️ Preview" />
             </div>
-          ))}</div>}
-        </Panel>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 mb-4 flex items-center gap-2 text-sm">
+                ⚠ {error}
+                <button onClick={() => setError('')} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+              </div>
+            )}
+
+            {tab === 'compose' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Campaign Name</label>
+                  <Input placeholder="e.g. July Promo Campaign" value={form.name}
+                    onChange={e => setForm({ ...form, name: e.target.value })} />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">WhatsApp Session</label>
+                  <Select value={form.sessionId} onChange={e => setForm({ ...form, sessionId: e.target.value })}>
+                    <option value="">⚠️ Dry run — no messages sent</option>
+                    {sessions.map(s => <option key={s.id} value={s.sessionId}>{s.name} ({s.status})</option>)}
+                  </Select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recipients</label>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${parsedRecipients.length > 0 ? 'bg-success/15 text-success' : 'bg-slate-800 text-slate-500'}`}>
+                      {parsedRecipients.length} contacts
+                    </span>
+                  </div>
+                  <Textarea rows={6} value={form.recipients}
+                    onChange={e => setForm({ ...form, recipients: e.target.value })}
+                    placeholder={'One per line or comma-separated:\n923001234567@s.whatsapp.net\n923009876543@s.whatsapp.net'} />
+                  <p className="text-[11px] text-slate-600 mt-1">Use <code className="text-slate-500">number@s.whatsapp.net</code> format</p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Message</label>
+                    <span className="text-[11px] text-slate-600">{form.text.length} chars</span>
+                  </div>
+                  <Textarea rows={5} value={form.text}
+                    onChange={e => setForm({ ...form, text: e.target.value })}
+                    placeholder="Hello! This is a message from our team..." />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Delay Between Messages</label>
+                    <span className="text-sm text-white font-bold">{(parseInt(form.delayMs) / 1000).toFixed(1)}s</span>
+                  </div>
+                  <input type="range" min="500" max="10000" step="500" value={form.delayMs}
+                    onChange={e => setForm({ ...form, delayMs: e.target.value })}
+                    className="w-full accent-primary" />
+                  <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
+                    <span>0.5s (fast)</span><span>5s (recommended)</span><span>10s (safe)</span>
+                  </div>
+                </div>
+
+                <Button onClick={create} disabled={creating} className="w-full justify-center py-2.5">
+                  {creating ? <><RefreshCw size={15} className="animate-spin" /> Creating…</> : <><Plus size={15} /> Create Campaign</>}
+                </Button>
+              </div>
+            )}
+
+            {tab === 'preview' && (
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <div className="bg-[#0d1f17] border border-[#1a3028] rounded-2xl p-4 w-[280px]">
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a3028]">
+                      <div className="w-9 h-9 rounded-full bg-success/20 flex items-center justify-center text-success font-bold">
+                        {(form.name || 'C')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-white text-sm font-semibold">{form.name || 'Campaign Name'}</div>
+                        <div className="text-[10px] text-slate-500">WhatsApp Business</div>
+                      </div>
+                    </div>
+                    <div className="bg-[#1a3a25] rounded-xl rounded-tl-none p-3 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap min-h-[60px]">
+                      {form.text || <span className="text-slate-600 italic">No message yet…</span>}
+                    </div>
+                    <div className="text-[10px] text-slate-600 text-right mt-1.5">
+                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-background border border-border rounded-xl p-4 space-y-3 text-sm">
+                  {[
+                    ['👥 Recipients', parsedRecipients.length, parsedRecipients.length > 0 ? 'text-white' : 'text-slate-500'],
+                    ['📱 Session', form.sessionId ? (sessions.find(s => s.sessionId === form.sessionId)?.name || form.sessionId) : 'Dry run', form.sessionId ? 'text-success' : 'text-amber-400'],
+                    ['⏱ Delay', `${(parseInt(form.delayMs) / 1000).toFixed(1)}s per message`, 'text-white'],
+                    ['🕐 Est. duration', parsedRecipients.length > 0 ? `~${Math.ceil(parsedRecipients.length * parseInt(form.delayMs) / 1000)}s` : '—', 'text-slate-400'],
+                  ].map(([l, v, c]) => (
+                    <div key={l} className="flex justify-between">
+                      <span className="text-slate-500">{l}</span>
+                      <span className={`font-medium ${c}`}>{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <div className="space-y-5">
+          <Panel title={`Campaigns (${broadcasts.length})`}>
+            {broadcasts.length === 0
+              ? <Empty text="No campaigns yet. Create one on the left." />
+              : <div className="space-y-3">
+                  {broadcasts.map(item => {
+                    const s = stats(item);
+                    const isRunning = item.status === 'RUNNING';
+                    const sentPct = item.recipients.length > 0 ? Math.round((s.total / item.recipients.length) * 100) : 0;
+                    const okPct = s.total > 0 ? Math.round((s.ok / s.total) * 100) : 0;
+                    return (
+                      <div key={item.id} onClick={() => setSelected(selected?.id === item.id ? null : item)}
+                        className={`border rounded-xl p-4 cursor-pointer transition ${selected?.id === item.id ? 'border-primary/50 bg-primary/5' : 'border-border bg-background hover:border-slate-600'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="text-white font-semibold truncate">{item.name}</h3>
+                            <p className="text-xs text-slate-500 truncate mt-0.5 max-w-[280px]">{item.text}</p>
+                          </div>
+                          <StatusPill status={item.status} />
+                        </div>
+
+                        <div className="flex items-center gap-4 mt-2.5 text-xs text-slate-500 flex-wrap">
+                          <span>👥 {item.recipients.length}</span>
+                          <span>⏱ {((item.delayMs || 2000) / 1000).toFixed(1)}s</span>
+                          {s.total > 0 && <>
+                            <span className="text-success font-medium">✓ {s.ok} sent</span>
+                            {s.fail > 0 && <span className="text-danger font-medium">✗ {s.fail} failed</span>}
+                          </>}
+                          {isRunning && <span className="text-amber-400 font-medium animate-pulse">{s.total}/{item.recipients.length} sending…</span>}
+                        </div>
+
+                        {(isRunning || s.total > 0) && (
+                          <div className="mt-3">
+                            <div className="h-2 bg-border rounded-full overflow-hidden flex">
+                              <div className="h-full bg-success transition-all rounded-full"
+                                style={{ width: `${Math.round(s.ok / Math.max(item.recipients.length, 1) * 100)}%` }} />
+                              {s.fail > 0 && <div className="h-full bg-danger"
+                                style={{ width: `${Math.round(s.fail / Math.max(item.recipients.length, 1) * 100)}%` }} />}
+                            </div>
+                            <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
+                              <span>{sentPct}% sent</span>
+                              {s.total > 0 && <span>{okPct}% success</span>}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 mt-3" onClick={e => e.stopPropagation()}>
+                          {!isRunning ? (
+                            <Button variant="success" onClick={() => run(item)} disabled={runningId === item.id} className="text-xs py-1.5">
+                              {runningId === item.id ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
+                              {item.status === 'DRAFT' ? 'Send Now' : 'Re-run'}
+                            </Button>
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs text-amber-400">
+                              <RefreshCw size={11} className="animate-spin" /> Running…
+                            </span>
+                          )}
+                          <Button variant="danger" onClick={() => remove(item)} className="text-xs py-1.5">
+                            <Trash2 size={12} /> Delete
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+            }
+          </Panel>
+
+          {selected && (() => {
+            const results = Array.isArray(selected.result) ? selected.result : [];
+            const ok = results.filter(r => r.success);
+            const fail = results.filter(r => !r.success);
+            return (
+              <Panel title={`📊 Results — ${selected.name}`}>
+                {results.length === 0
+                  ? <Empty text="No results yet. Click 'Send Now' to run this campaign." />
+                  : <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        {[['Total', results.length, 'text-white'], ['Delivered', ok.length, 'text-success'], ['Failed', fail.length, 'text-danger']].map(([l, v, c]) => (
+                          <div key={l} className="bg-background border border-border rounded-xl p-3 text-center">
+                            <div className={`text-3xl font-bold ${c}`}>{v}</div>
+                            <div className="text-xs text-slate-500 mt-1">{l}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {fail.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-danger uppercase tracking-wider mb-2">Failed</div>
+                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                            {fail.map((r, i) => (
+                              <div key={i} className="bg-background border border-danger/20 rounded-lg p-2 flex justify-between gap-2 text-xs">
+                                <code className="text-slate-400 truncate">{r.to}</code>
+                                <span className="text-danger shrink-0">{r.error}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {ok.length > 0 && (
+                        <details className="group">
+                          <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 list-none flex items-center gap-1">
+                            <ChevronRight size={11} className="group-open:rotate-90 transition" /> {ok.length} delivered recipients
+                          </summary>
+                          <div className="mt-2 max-h-40 overflow-y-auto space-y-0.5">
+                            {ok.map((r, i) => <div key={i} className="text-xs text-slate-600 font-mono py-0.5">{r.to}</div>)}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                }
+              </Panel>
+            );
+          })()}
+        </div>
       </div>
     </Page>
   );
@@ -488,7 +746,6 @@ export const WebhooksPage = () => {
     try {
       let body = {};
       try { body = JSON.parse(testBody); } catch { /* ignore */ }
-      // item.url is e.g. /api/webhook/:flowId — use fullUrl to avoid baseURL double-encoding
       const res = await fetch(fullUrl(item.url), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,7 +762,6 @@ export const WebhooksPage = () => {
     <Page title="Webhooks" description="Trigger active flows from external systems using generated webhook URLs." icon={Webhook} actions={<Button variant="secondary" onClick={load}><RefreshCw size={16} /> Refresh</Button>}>
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5 mb-5">
         <div className="space-y-5">
-          {/* Flow webhook list */}
           <Panel title="Flow Webhooks">
             {data.length === 0 ? <Empty text="Create and save a flow first to generate its webhook URL." /> : (
               <div className="space-y-4">
@@ -548,14 +804,12 @@ export const WebhooksPage = () => {
             )}
           </Panel>
 
-          {/* Test payload editor */}
           <Panel title="Test Payload">
             <p className="text-sm text-slate-400 mb-3">JSON body sent when you click <strong className="text-white">Test</strong> on a webhook above.</p>
             <Textarea rows={6} className="font-mono text-xs" value={testBody} onChange={(e) => setTestBody(e.target.value)} />
           </Panel>
         </div>
 
-        {/* Docs sidebar */}
         <div className="space-y-5">
           <Panel title="Payload Reference">
             <div className="space-y-3 text-sm">
@@ -694,7 +948,6 @@ export const ApiPage = () => {
     <Page title="REST API" description="Complete reference for all endpoints exposed by this WAAI Flow instance." icon={Code2}>
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5">
         <div className="space-y-5">
-          {/* Auth section */}
           <Panel title="Authentication">
             <div className="space-y-4 text-sm text-slate-400">
               <p>All endpoints except <code className="text-primary">/api/auth/login</code> and <code className="text-primary">/api/webhook/:flowId</code> require a Bearer token.</p>
@@ -703,7 +956,6 @@ export const ApiPage = () => {
             </div>
           </Panel>
 
-          {/* Endpoint categories */}
           {API_CATEGORIES.map((cat) => (
             <Panel key={cat.title}>
               <button onClick={() => toggleSection(cat.title)} className="w-full flex items-center justify-between gap-2 mb-1 group">
@@ -746,7 +998,6 @@ export const ApiPage = () => {
           ))}
         </div>
 
-        {/* Right sidebar */}
         <div className="space-y-5">
           <Panel title="Base URL">
             <CodeBlock lang="url" code={baseUrl} />

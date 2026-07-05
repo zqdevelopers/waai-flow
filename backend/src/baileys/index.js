@@ -95,7 +95,6 @@ class BaileysService {
       
       if (qr) {
         this.qrCache.set(sessionId, qr);
-        // Emit QR to frontend
         io.emit(`qr-${sessionId}`, { qr });
         io.emit('qr', { sessionId, qr }); // Global event
         qrcode.generate(qr, { small: true });
@@ -123,7 +122,6 @@ class BaileysService {
           this.startSession(sessionId);
         } else {
           this.sessions.delete(sessionId);
-          // Delete folder if logged out
           fs.rmSync(sessionDir, { recursive: true, force: true });
         }
       } else if (connection === 'open') {
@@ -526,7 +524,6 @@ class BaileysService {
     const remoteJid = msg.key.remoteJid;
     const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
 
-    // Save to DB
     await prisma.message.create({
       data: {
         remoteJid,
@@ -537,10 +534,8 @@ class BaileysService {
       }
     });
 
-    // Trigger active flows that have a webhook_trigger node and are linked to this session
     try {
       const { flowEngine } = await import('../flow/engine.js');
-      // Flow.sessionId is the UUID FK to Session.id, not the sessionId string
       const session = await prisma.session.findUnique({ where: { sessionId } });
       if (!session) return;
       const flows = await prisma.flow.findMany({

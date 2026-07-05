@@ -16,7 +16,6 @@ import authRoutes, { requireAuth } from './auth.js';
 import { dataPath } from './paths.js';
 import { baileyService } from './baileys/index.js';
 
-// Load environment variables
 dotenv.config();
 
 export const logBuffer = [];
@@ -24,7 +23,6 @@ export const logBuffer = [];
 const logDir = dataPath('logs');
 if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
 
-// Create logger with in-memory buffer + persistent file output
 export const logger = pino(
   {
     hooks: {
@@ -66,7 +64,6 @@ const corsOrigins = process.env.CORS_ORIGINS
 
 const corsOptions = { origin: corsOrigins, methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] };
 
-// Configure Socket.IO
 export const io = new Server(server, { cors: corsOptions });
 
 const authLimiter = rateLimit({
@@ -85,18 +82,15 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please slow down' }
 });
 
-// Middlewares
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(dataPath('uploads')));
 
-// Basic Status Route
 app.get('/api/status', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
-// Routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/webhook', apiLimiter, webhookRoutes);
 app.use('/api', apiLimiter, requireAuth, mainRoutes);
@@ -112,7 +106,6 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
-// Socket.io connection handler
 io.on('connection', (socket) => {
   logger.info(`Client connected: ${socket.id}`);
   
@@ -123,11 +116,13 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-// Connect DB and Start Server
-connectDB().then(async () => {
-  await pluginLoader.loadPlugins();
-  await baileyService.init();
-  server.listen(PORT, () => {
-    logger.info(`Server is running on port ${PORT}`);
+server.listen(PORT, () => {
+  logger.info(`Server is running on port ${PORT}`);
+  connectDB().then(async () => {
+    await pluginLoader.loadPlugins();
+    await baileyService.init();
+  }).catch((err) => {
+    logger.error('Startup initialization failed:', err);
+    process.exit(1);
   });
 });

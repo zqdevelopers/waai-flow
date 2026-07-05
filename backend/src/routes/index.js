@@ -8,6 +8,5 @@ const router = Router();
 router.use('/session', sessionRoutes);
 router.use('/flows', flowRoutes);
 router.use('/modules', modulesRoutes);
-// We can also have an execute/send route here or inside session.
 
 export default router;

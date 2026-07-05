@@ -403,6 +403,7 @@ export const createBroadcast = async (req, res) => {
         sessionId: req.body.sessionId || null,
         recipients: stringify(recipients),
         text: req.body.text || '',
+        delayMs: Number(req.body.delayMs ?? 1000),
         status: 'DRAFT'
       }
     });
@@ -417,29 +418,41 @@ export const runBroadcast = async (req, res) => {
   try {
     const broadcast = await prisma.broadcast.findUnique({ where: { id: req.params.id } });
     if (!broadcast) return res.status(404).json({ error: 'Broadcast not found' });
+    if (broadcast.status === 'RUNNING') return res.status(400).json({ error: 'Broadcast already running' });
 
     const recipients = parseJson(broadcast.recipients, []);
+    const delayMs = broadcast.delayMs ?? 1000;
     const result = [];
-    await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: 'RUNNING' } });
 
-    for (const to of recipients) {
+    await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: 'RUNNING', result: '[]' } });
+
+    res.json({ success: true, message: `Sending to ${recipients.length} recipients…` });
+
+    for (let i = 0; i < recipients.length; i++) {
+      const to = recipients[i];
       try {
         if (broadcast.sessionId) await baileyService.sendMessage(broadcast.sessionId, to, { text: broadcast.text });
         result.push({ to, success: true });
       } catch (error) {
         result.push({ to, success: false, error: error.message });
       }
+      await prisma.broadcast.update({
+        where: { id: broadcast.id },
+        data: { result: JSON.stringify(result) }
+      }).catch(() => {});
+      if (delayMs > 0 && i < recipients.length - 1) {
+        await new Promise(r => setTimeout(r, delayMs));
+      }
     }
 
-    const failed = result.some((item) => !item.success);
-    const updated = await prisma.broadcast.update({
+    const anyFailed = result.some((item) => !item.success);
+    await prisma.broadcast.update({
       where: { id: broadcast.id },
-      data: { status: failed ? 'FAILED' : 'COMPLETED', result: JSON.stringify(result) }
-    });
-    res.json({ ...updated, recipients, result });
+      data: { status: anyFailed ? 'PARTIAL' : 'COMPLETED', result: JSON.stringify(result) }
+    }).catch(() => {});
   } catch (error) {
     logger.error(error);
-    res.status(500).json({ error: 'Failed to run broadcast' });
+    await prisma.broadcast.update({ where: { id: req.params.id }, data: { status: 'FAILED' } }).catch(() => {});
   }
 };
 

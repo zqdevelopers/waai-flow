@@ -8,7 +8,6 @@ export class GeminiProvider extends AIProvider {
 
     const model = this.config.model || 'gemini-2.0-flash';
 
-    // Gemini does not support role:'system' inside contents — extract it separately
     const systemParts = messages.filter(m => m.role === 'system').map(m => m.content);
     const conversationMessages = messages.filter(m => m.role !== 'system');
 
@@ -17,7 +16,6 @@ export class GeminiProvider extends AIProvider {
       parts: [{ text: msg.content }]
     }));
 
-    // Gemini requires at least one user message
     if (!contents.length) contents.push({ role: 'user', parts: [{ text: '' }] });
 
     const requestBody = { contents };
