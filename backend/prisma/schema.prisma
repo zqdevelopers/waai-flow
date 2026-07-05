@@ -10,25 +10,25 @@ datasource db {
 
 model Session {
   id        String   @id @default(uuid())
-  sessionId String   @unique // The WhatsApp session ID used by Baileys
-  name      String   // Display name
-  status    String   @default("DISCONNECTED") // CONNECTED, DISCONNECTED, CONNECTING
+  sessionId String   @unique
+  name      String
+  status    String   @default("DISCONNECTED")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  Flows     Flow[]   // Flows attached to this session
+  Flows     Flow[]
 }
 
 model Flow {
-  id          String   @id @default(uuid())
+  id          String      @id @default(uuid())
   name        String
   description String?
-  nodes       String   // JSON string of React Flow nodes
-  edges       String   // JSON string of React Flow edges
-  isActive    Boolean  @default(false)
+  nodes       String
+  edges       String
+  isActive    Boolean     @default(false)
   sessionId   String?
-  Session     Session? @relation(fields: [sessionId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  Session     Session?    @relation(fields: [sessionId], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   Executions  Execution[]
 }
 
@@ -36,23 +36,23 @@ model Execution {
   id        String   @id @default(uuid())
   flowId    String
   Flow      Flow     @relation(fields: [flowId], references: [id])
-  status    String   // PENDING, RUNNING, COMPLETED, FAILED
-  logs      String   // JSON string of execution steps/logs
+  status    String
+  logs      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Agent {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  provider    String   @default("openai")
-  model       String   @default("gpt-4o")
-  systemPrompt String  @default("You are a helpful WhatsApp assistant.")
-  temperature Float    @default(0.7)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  provider     String   @default("openai")
+  model        String   @default("gpt-4o")
+  systemPrompt String   @default("You are a helpful WhatsApp assistant.")
+  temperature  Float    @default(0.7)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Message {
@@ -69,23 +69,23 @@ model Broadcast {
   id         String   @id @default(uuid())
   name       String
   sessionId  String?
-  recipients String   // JSON array of WhatsApp JIDs
+  recipients String
   text       String
   delayMs    Int      @default(1000)
-  status     String   @default("DRAFT") // DRAFT, RUNNING, COMPLETED, FAILED
-  result     String?  // JSON execution result
+  status     String   @default("DRAFT")
+  result     String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
 model FileAsset {
-  id        String   @id @default(uuid())
+  id           String   @id @default(uuid())
   originalName String
-  filename  String
-  mimeType  String
-  size      Int
-  path      String
-  createdAt DateTime @default(now())
+  filename     String
+  mimeType     String
+  size         Int
+  path         String
+  createdAt    DateTime @default(now())
 }
 
 model Variable {
@@ -109,7 +109,7 @@ model Plugin {
   name        String   @unique
   description String?
   isActive    Boolean  @default(true)
-  config      String?  // JSON string of plugin-specific configs
+  config      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
