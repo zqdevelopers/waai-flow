@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bot, Play, MessageSquare, MessagesSquare, Megaphone, Webhook, Code2,
   Cpu, Puzzle, Folder, BarChart2, Settings, Globe, FileText, Plus, Trash2,
@@ -101,9 +101,14 @@ const useResource = (path, initial = []) => {
 
 const useSessions = () => {
   const [sessions, setSessions] = useState([]);
-  useEffect(() => {
+  const load = useCallback(() => {
     api.get('/session').then((res) => setSessions(res.data)).catch(() => setSessions([]));
   }, []);
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [load]);
   return sessions;
 };
 

@@ -150,7 +150,8 @@ export const getExecutions = async (req, res) => {
 
 export const getConversations = async (req, res) => {
   try {
-    const messages = await prisma.message.findMany({ orderBy: { createdAt: 'desc' }, take: 500 });
+    const limit = Math.min(Number(req.query.limit) || 500, 2000);
+    const messages = await prisma.message.findMany({ orderBy: { createdAt: 'desc' }, take: limit });
     const grouped = new Map();
     for (const message of messages) {
       const current = grouped.get(message.remoteJid) || {
@@ -177,8 +178,15 @@ export const getConversations = async (req, res) => {
 
 export const getMessages = async (req, res) => {
   try {
+    const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    const cursor = req.query.cursor;
     const where = req.query.remoteJid ? { remoteJid: req.query.remoteJid } : undefined;
-    const messages = await prisma.message.findMany({ where, orderBy: { createdAt: 'desc' }, take: 200 });
+    const messages = await prisma.message.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
+    });
     res.json(messages);
   } catch (error) {
     logger.error(error);
@@ -422,34 +430,39 @@ export const runBroadcast = async (req, res) => {
 
     const recipients = parseJson(broadcast.recipients, []);
     const delayMs = broadcast.delayMs ?? 1000;
-    const result = [];
 
     await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: 'RUNNING', result: '[]' } });
-
     res.json({ success: true, message: `Sending to ${recipients.length} recipients…` });
 
-    for (let i = 0; i < recipients.length; i++) {
-      const to = recipients[i];
+    (async () => {
+      const result = [];
       try {
-        if (broadcast.sessionId) await baileyService.sendMessage(broadcast.sessionId, to, { text: broadcast.text });
-        result.push({ to, success: true });
+        for (let i = 0; i < recipients.length; i++) {
+          const to = recipients[i];
+          try {
+            if (broadcast.sessionId) await baileyService.sendMessage(broadcast.sessionId, to, { text: broadcast.text });
+            result.push({ to, success: true });
+          } catch (error) {
+            result.push({ to, success: false, error: error.message });
+          }
+          await prisma.broadcast.update({
+            where: { id: broadcast.id },
+            data: { result: JSON.stringify(result) }
+          }).catch(() => {});
+          if (delayMs > 0 && i < recipients.length - 1) {
+            await new Promise(r => setTimeout(r, delayMs));
+          }
+        }
+        const anyFailed = result.some((item) => !item.success);
+        await prisma.broadcast.update({
+          where: { id: broadcast.id },
+          data: { status: anyFailed ? 'PARTIAL' : 'COMPLETED', result: JSON.stringify(result) }
+        }).catch(() => {});
       } catch (error) {
-        result.push({ to, success: false, error: error.message });
+        logger.error({ error, broadcastId: broadcast.id }, 'Broadcast loop failed');
+        await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: 'FAILED' } }).catch(() => {});
       }
-      await prisma.broadcast.update({
-        where: { id: broadcast.id },
-        data: { result: JSON.stringify(result) }
-      }).catch(() => {});
-      if (delayMs > 0 && i < recipients.length - 1) {
-        await new Promise(r => setTimeout(r, delayMs));
-      }
-    }
-
-    const anyFailed = result.some((item) => !item.success);
-    await prisma.broadcast.update({
-      where: { id: broadcast.id },
-      data: { status: anyFailed ? 'PARTIAL' : 'COMPLETED', result: JSON.stringify(result) }
-    }).catch(() => {});
+    })();
   } catch (error) {
     logger.error(error);
     await prisma.broadcast.update({ where: { id: req.params.id }, data: { status: 'FAILED' } }).catch(() => {});

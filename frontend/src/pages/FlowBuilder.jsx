@@ -281,6 +281,7 @@ const FlowBuilder = () => {
   const [execLogs, setExecLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const socketRef = useRef(null);
+  const logHandlerRef = useRef(null);
 
   const selectedNode = nodes.find(n => n.id === selectedId) || null;
 
@@ -288,8 +289,11 @@ const FlowBuilder = () => {
     api.get('/flows').then(r => setFlows(r.data)).catch(() => {});
     api.get('/session').then(r => setSessions(r.data)).catch(() => {});
     return () => {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
+      if (socketRef.current) {
+        if (logHandlerRef.current) socketRef.current.off('flow-log', logHandlerRef.current);
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, []);
 
@@ -336,6 +340,24 @@ const FlowBuilder = () => {
     setSelectedId(null); setExecLogs([]); setShowLogs(false); setSaveError('');
   };
 
+  const handleToggleActive = async () => {
+    const newActive = !flowIsActive;
+    setFlowIsActive(newActive);
+    if (!currentFlowId) return;
+    setSaving(true); setSaveError('');
+    try {
+      await api.put(`/flows/${currentFlowId}`, {
+        name: flowName, nodes: JSON.stringify(nodes), edges: JSON.stringify(edges),
+        isActive: newActive, sessionId: flowSessionId || null
+      });
+      const r = await api.get('/flows');
+      setFlows(r.data);
+    } catch (err) {
+      setSaveError(err.response?.data?.error || 'Error saving flow');
+      setFlowIsActive(!newActive);
+    } finally { setSaving(false); }
+  };
+
   const runFlow = async () => {
     if (!currentFlowId) { setSaveError('Save the flow first before running.'); return; }
     let vars = {};
@@ -348,9 +370,12 @@ const FlowBuilder = () => {
       socketRef.current = io(SOCKET_URL || window.location.origin, { auth: { token } });
     }
     const sock = socketRef.current;
+
+    if (logHandlerRef.current) sock.off('flow-log', logHandlerRef.current);
     const onLog = (log) => {
       if (log.flowId === currentFlowId) setExecLogs(p => [...p, { ...log, time: new Date().toISOString() }]);
     };
+    logHandlerRef.current = onLog;
     sock.on('flow-log', onLog);
 
     try {
@@ -358,7 +383,11 @@ const FlowBuilder = () => {
     } catch (err) {
       setExecLogs(p => [...p, { status: 'FAILED', message: err.response?.data?.error || err.message, time: new Date().toISOString() }]);
     } finally {
-      setTimeout(() => { sock.off('flow-log', onLog); setRunning(false); }, 2000);
+      setTimeout(() => {
+        sock.off('flow-log', onLog);
+        logHandlerRef.current = null;
+        setRunning(false);
+      }, 8000);
     }
   };
 
@@ -773,7 +802,7 @@ const FlowBuilder = () => {
 
             <Panel position="top-right" className="flex flex-col items-end gap-2 m-4">
               <div className="flex gap-2">
-                <button onClick={() => setFlowIsActive(v => !v)}
+                <button onClick={handleToggleActive}
                   className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition ${flowIsActive ? 'bg-success/15 border-success/40 text-success' : 'bg-surface border-border text-slate-500 hover:text-white'}`}>
                   {flowIsActive ? '● ACTIVE' : '○ DRAFT'}
                 </button>

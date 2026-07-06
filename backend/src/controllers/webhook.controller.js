@@ -26,7 +26,9 @@ export const handleWebhook = async (req, res) => {
     }
 
     let nodes = [];
-    try { nodes = JSON.parse(flow.nodes || '[]'); } catch {}
+    try { nodes = JSON.parse(flow.nodes || '[]'); } catch {
+      return res.status(400).json({ error: 'Flow configuration is invalid' });
+    }
     const triggerNode = nodes.find(n => n.type === 'webhook_trigger');
 
     if (triggerNode?.data?.secret) {
