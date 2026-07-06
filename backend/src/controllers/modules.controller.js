@@ -399,6 +399,32 @@ export const getBroadcasts = async (req, res) => {
   }
 };
 
+const buildBroadcastPayload = (broadcast) => {
+  const type = broadcast.messageType || 'text';
+  const data = parseJson(broadcast.messageData, {});
+  switch (type) {
+    case 'image':
+      return { type: 'image', url: data.url || '', caption: broadcast.text };
+    case 'video':
+      return { type: 'video', url: data.url || '', caption: broadcast.text };
+    case 'document':
+      return { type: 'document', url: data.url || '', fileName: data.fileName || 'document', caption: broadcast.text };
+    case 'buttons':
+      return { type: 'buttons', text: broadcast.text, buttons: (data.buttons || []).map(b => ({ displayText: b, id: b })), footer: data.footer || '' };
+    case 'list':
+      return {
+        type: 'list',
+        title: data.title || '',
+        buttonText: data.buttonText || 'View Options',
+        description: broadcast.text,
+        footer: data.footer || '',
+        sections: data.sections || []
+      };
+    default:
+      return { text: broadcast.text };
+  }
+};
+
 export const createBroadcast = async (req, res) => {
   try {
     const recipients = Array.isArray(req.body.recipients)
@@ -410,7 +436,9 @@ export const createBroadcast = async (req, res) => {
         name: req.body.name || 'Untitled Broadcast',
         sessionId: req.body.sessionId || null,
         recipients: stringify(recipients),
+        messageType: req.body.messageType || 'text',
         text: req.body.text || '',
+        messageData: req.body.messageData ? JSON.stringify(req.body.messageData) : null,
         delayMs: Number(req.body.delayMs ?? 1000),
         status: 'DRAFT'
       }
@@ -440,7 +468,7 @@ export const runBroadcast = async (req, res) => {
         for (let i = 0; i < recipients.length; i++) {
           const to = recipients[i];
           try {
-            if (broadcast.sessionId) await baileyService.sendMessage(broadcast.sessionId, to, { text: broadcast.text });
+            if (broadcast.sessionId) await baileyService.sendMessage(broadcast.sessionId, to, buildBroadcastPayload(broadcast));
             result.push({ to, success: true });
           } catch (error) {
             result.push({ to, success: false, error: error.message });

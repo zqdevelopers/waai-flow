@@ -55,7 +55,7 @@ Open-source WhatsApp AI automation platform — visual flow builder, AI agents, 
 | Create & run broadcast | ✅ | Non-blocking; frontend polls for progress |
 | Edit draft broadcast | ❌ | Coming soon |
 | Cancel running broadcast | ❌ | Coming soon |
-| Broadcast message types | 🟡 | Text only currently; image/button/list coming soon |
+| Broadcast message types | ✅ | Text, image, video, document, buttons, list |
 | Scheduled broadcasts | 🗺️ | Planned |
 | Per-recipient delivery tracking | 🗺️ | Planned |
 
@@ -117,7 +117,6 @@ Open-source WhatsApp AI automation platform — visual flow builder, AI agents, 
 - [ ] Keyword / regex filter UI for webhook trigger node
 - [ ] Edit draft broadcasts (`PUT /modules/broadcasts/:id`)
 - [ ] Cancel running broadcast
-- [ ] Broadcast message type selector (image, buttons, list)
 - [ ] Link Agent profiles to Flow Builder AI Chat node
 - [ ] Flow delete + duplicate buttons in sidebar
 - [ ] Flow export / import as JSON

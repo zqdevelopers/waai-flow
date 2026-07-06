@@ -429,10 +429,27 @@ const TabBtn = ({ id, label, active, onClick }) => (
   </button>
 );
 
+const MSG_TYPES = [
+  { id: 'text', label: 'Text', icon: '💬' },
+  { id: 'image', label: 'Image', icon: '🖼️' },
+  { id: 'video', label: 'Video', icon: '🎬' },
+  { id: 'document', label: 'Doc', icon: '📄' },
+  { id: 'buttons', label: 'Buttons', icon: '🔘' },
+  { id: 'list', label: 'List', icon: '📋' },
+];
+
 export const BroadcastPage = () => {
   const { data: broadcasts, load } = useResource('/modules/broadcasts');
   const sessions = useSessions();
-  const BLANK = { name: '', sessionId: '', recipients: '', text: '', delayMs: '2000' };
+  const BLANK = {
+    name: '', sessionId: '', recipients: '', text: '', delayMs: '2000',
+    messageType: 'text',
+    mediaUrl: '', fileName: 'document',
+    footer: '',
+    btn1: '', btn2: '', btn3: '',
+    listButtonText: 'View Options',
+    listItem1: '', listItem2: '', listItem3: '', listItem4: '', listItem5: '',
+  };
   const [form, setForm] = useState(BLANK);
   const [tab, setTab] = useState('compose');
   const [creating, setCreating] = useState(false);
@@ -455,13 +472,59 @@ export const BroadcastPage = () => {
     if (selected) setSelected(broadcasts.find(b => b.id === selected.id) || null);
   }, [broadcasts]);
 
+  const buildMessageData = () => {
+    switch (form.messageType) {
+      case 'image': case 'video':
+        return { url: form.mediaUrl };
+      case 'document':
+        return { url: form.mediaUrl, fileName: form.fileName || 'document' };
+      case 'buttons':
+        return {
+          buttons: [form.btn1, form.btn2, form.btn3].filter(Boolean),
+          footer: form.footer
+        };
+      case 'list':
+        return {
+          title: form.name,
+          buttonText: form.listButtonText || 'View Options',
+          footer: form.footer,
+          sections: [{
+            title: 'Options',
+            rows: [form.listItem1, form.listItem2, form.listItem3, form.listItem4, form.listItem5]
+              .filter(Boolean)
+              .map((item, i) => ({ rowId: `item_${i}`, title: item }))
+          }]
+        };
+      default:
+        return null;
+    }
+  };
+
   const create = async () => {
     if (!form.name.trim()) { setError('Campaign name is required'); return; }
     if (!parsedRecipients.length) { setError('Add at least one recipient'); return; }
     if (!form.text.trim()) { setError('Message text is required'); return; }
+    if (['image', 'video', 'document'].includes(form.messageType) && !form.mediaUrl.trim()) {
+      setError('Media URL is required for this message type'); return;
+    }
+    if (form.messageType === 'buttons' && !form.btn1.trim()) {
+      setError('At least one button label is required'); return;
+    }
+    if (form.messageType === 'list' && !form.listItem1.trim()) {
+      setError('At least one list item is required'); return;
+    }
     setCreating(true); setError('');
     try {
-      await api.post('/modules/broadcasts', { ...form, recipients: parsedRecipients, delayMs: parseInt(form.delayMs) || 2000 });
+      const messageData = buildMessageData();
+      await api.post('/modules/broadcasts', {
+        name: form.name,
+        sessionId: form.sessionId,
+        recipients: parsedRecipients,
+        text: form.text,
+        delayMs: parseInt(form.delayMs) || 2000,
+        messageType: form.messageType,
+        messageData,
+      });
       setForm(BLANK); setTab('compose'); load();
     } catch (err) { setError(err.response?.data?.error || 'Failed to create'); }
     finally { setCreating(false); }
@@ -489,10 +552,12 @@ export const BroadcastPage = () => {
     return { ok: r.filter(x => x.success).length, fail: r.filter(x => !x.success).length, total: r.length };
   };
 
+  const typeIcon = MSG_TYPES.find(t => t.id === form.messageType)?.icon || '💬';
+
   return (
     <Page title="Broadcast" description="Send bulk WhatsApp messages to multiple contacts at once." icon={Megaphone}
       actions={<Button variant="secondary" onClick={load}><RefreshCw size={16} /> Refresh</Button>}>
-      <div className="grid grid-cols-1 xl:grid-cols-[460px_1fr] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[480px_1fr] gap-6">
 
         <div className="space-y-5">
           <Panel>
@@ -525,13 +590,30 @@ export const BroadcastPage = () => {
                 </div>
 
                 <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Message Type</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MSG_TYPES.map(t => (
+                      <button key={t.id} type="button"
+                        onClick={() => setForm({ ...form, messageType: t.id })}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                          form.messageType === t.id
+                            ? 'bg-primary/20 border-primary/50 text-primary'
+                            : 'bg-background border-border text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                        }`}>
+                        <span>{t.icon}</span> {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recipients</label>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${parsedRecipients.length > 0 ? 'bg-success/15 text-success' : 'bg-slate-800 text-slate-500'}`}>
                       {parsedRecipients.length} contacts
                     </span>
                   </div>
-                  <Textarea rows={6} value={form.recipients}
+                  <Textarea rows={5} value={form.recipients}
                     onChange={e => setForm({ ...form, recipients: e.target.value })}
                     placeholder={'One per line or comma-separated:\n923001234567@s.whatsapp.net\n923009876543@s.whatsapp.net'} />
                   <p className="text-[11px] text-slate-600 mt-1">Use <code className="text-slate-500">number@s.whatsapp.net</code> format</p>
@@ -539,13 +621,71 @@ export const BroadcastPage = () => {
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Message</label>
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {form.messageType === 'list' ? 'Description' : form.messageType === 'buttons' ? 'Message Body' : 'Caption / Message'}
+                    </label>
                     <span className="text-[11px] text-slate-600">{form.text.length} chars</span>
                   </div>
-                  <Textarea rows={5} value={form.text}
+                  <Textarea rows={4} value={form.text}
                     onChange={e => setForm({ ...form, text: e.target.value })}
                     placeholder="Hello! This is a message from our team..." />
                 </div>
+
+                {['image', 'video', 'document'].includes(form.messageType) && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Media URL</label>
+                    <Input placeholder="https://example.com/file.jpg" value={form.mediaUrl}
+                      onChange={e => setForm({ ...form, mediaUrl: e.target.value })} />
+                    {form.messageType === 'document' && (
+                      <div className="mt-2">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">File Name</label>
+                        <Input placeholder="document.pdf" value={form.fileName}
+                          onChange={e => setForm({ ...form, fileName: e.target.value })} />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {form.messageType === 'buttons' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Button Labels (up to 3)</label>
+                    <div className="space-y-2">
+                      {[['btn1', 'Button 1 (required)'], ['btn2', 'Button 2'], ['btn3', 'Button 3']].map(([key, ph]) => (
+                        <Input key={key} placeholder={ph} value={form[key]}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })} />
+                      ))}
+                    </div>
+                    <div className="mt-2">
+                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Footer (optional)</label>
+                      <Input placeholder="e.g. Powered by WAAI" value={form.footer}
+                        onChange={e => setForm({ ...form, footer: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+
+                {form.messageType === 'list' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">List Items (up to 5)</label>
+                    <div className="space-y-2">
+                      {[['listItem1', 'Item 1 (required)'], ['listItem2', 'Item 2'], ['listItem3', 'Item 3'], ['listItem4', 'Item 4'], ['listItem5', 'Item 5']].map(([key, ph]) => (
+                        <Input key={key} placeholder={ph} value={form[key]}
+                          onChange={e => setForm({ ...form, [key]: e.target.value })} />
+                      ))}
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Button Text</label>
+                        <Input placeholder="View Options" value={form.listButtonText}
+                          onChange={e => setForm({ ...form, listButtonText: e.target.value })} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Footer (optional)</label>
+                        <Input placeholder="Powered by WAAI" value={form.footer}
+                          onChange={e => setForm({ ...form, footer: e.target.value })} />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -569,7 +709,7 @@ export const BroadcastPage = () => {
             {tab === 'preview' && (
               <div className="space-y-4">
                 <div className="flex justify-center">
-                  <div className="bg-[#0d1f17] border border-[#1a3028] rounded-2xl p-4 w-[280px]">
+                  <div className="bg-[#0d1f17] border border-[#1a3028] rounded-2xl p-4 w-[300px]">
                     <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#1a3028]">
                       <div className="w-9 h-9 rounded-full bg-success/20 flex items-center justify-center text-success font-bold">
                         {(form.name || 'C')[0].toUpperCase()}
@@ -579,8 +719,35 @@ export const BroadcastPage = () => {
                         <div className="text-[10px] text-slate-500">WhatsApp Business</div>
                       </div>
                     </div>
-                    <div className="bg-[#1a3a25] rounded-xl rounded-tl-none p-3 text-sm text-slate-200 leading-relaxed whitespace-pre-wrap min-h-[60px]">
-                      {form.text || <span className="text-slate-600 italic">No message yet…</span>}
+                    <div className="bg-[#1a3a25] rounded-xl rounded-tl-none p-3 text-sm text-slate-200 leading-relaxed">
+                      {['image', 'video', 'document'].includes(form.messageType) && (
+                        <div className="bg-black/30 rounded-lg p-3 flex items-center gap-2 mb-2 text-xs text-slate-400">
+                          <span className="text-2xl">{typeIcon}</span>
+                          <div>
+                            <div className="text-slate-300 font-medium">{form.messageType === 'document' ? (form.fileName || 'document') : form.messageType}</div>
+                            {form.mediaUrl ? <div className="truncate max-w-[180px] text-slate-600">{form.mediaUrl}</div> : <div className="text-slate-600 italic">No URL set</div>}
+                          </div>
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap min-h-[40px]">
+                        {form.text || <span className="text-slate-600 italic">No message yet…</span>}
+                      </div>
+                      {form.messageType === 'buttons' && (
+                        <div className="mt-2 space-y-1">
+                          {[form.btn1, form.btn2, form.btn3].filter(Boolean).map((b, i) => (
+                            <div key={i} className="border border-[#2a5040] rounded-lg py-1.5 text-center text-xs text-primary font-medium">{b}</div>
+                          ))}
+                          {form.footer && <div className="text-[10px] text-slate-600 text-center mt-1">{form.footer}</div>}
+                        </div>
+                      )}
+                      {form.messageType === 'list' && (
+                        <div className="mt-2">
+                          <div className="border border-[#2a5040] rounded-lg py-1.5 text-center text-xs text-primary font-medium">
+                            {form.listButtonText || 'View Options'} ▾
+                          </div>
+                          {form.footer && <div className="text-[10px] text-slate-600 text-center mt-1">{form.footer}</div>}
+                        </div>
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-600 text-right mt-1.5">
                       {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓
@@ -590,6 +757,7 @@ export const BroadcastPage = () => {
                 <div className="bg-background border border-border rounded-xl p-4 space-y-3 text-sm">
                   {[
                     ['👥 Recipients', parsedRecipients.length, parsedRecipients.length > 0 ? 'text-white' : 'text-slate-500'],
+                    ['📨 Type', MSG_TYPES.find(t => t.id === form.messageType)?.label || 'Text', 'text-white'],
                     ['📱 Session', form.sessionId ? (sessions.find(s => s.sessionId === form.sessionId)?.name || form.sessionId) : 'Dry run', form.sessionId ? 'text-success' : 'text-amber-400'],
                     ['⏱ Delay', `${(parseInt(form.delayMs) / 1000).toFixed(1)}s per message`, 'text-white'],
                     ['🕐 Est. duration', parsedRecipients.length > 0 ? `~${Math.ceil(parsedRecipients.length * parseInt(form.delayMs) / 1000)}s` : '—', 'text-slate-400'],
@@ -621,7 +789,9 @@ export const BroadcastPage = () => {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="text-white font-semibold truncate">{item.name}</h3>
-                            <p className="text-xs text-slate-500 truncate mt-0.5 max-w-[280px]">{item.text}</p>
+                            <p className="text-xs text-slate-500 truncate mt-0.5 max-w-[280px]">
+                              {MSG_TYPES.find(t => t.id === (item.messageType || 'text'))?.icon || '💬'} {item.text || '—'}
+                            </p>
                           </div>
                           <StatusPill status={item.status} />
                         </div>
