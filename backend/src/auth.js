@@ -73,6 +73,8 @@ router.get('/me', (req, res) => {
   res.json({ user: req.user || null });
 });
 
+export const verifyToken = (token) => verify(token);
+
 export const requireAuth = (req, res, next) => {
   if (process.env.AUTH_DISABLED === 'true') {
     req.user = { username: 'auth-disabled', role: 'admin' };

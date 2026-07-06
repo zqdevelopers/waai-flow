@@ -12,7 +12,7 @@ import { connectDB } from './database/index.js';
 import mainRoutes from './routes/index.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import { pluginLoader } from './plugins/loader.js';
-import authRoutes, { requireAuth } from './auth.js';
+import authRoutes, { requireAuth, verifyToken } from './auth.js';
 import { dataPath } from './paths.js';
 import { baileyService } from './baileys/index.js';
 
@@ -104,6 +104,14 @@ app.get('*', (req, res, next) => {
 app.use((err, req, res, next) => {
   logger.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
+
+io.use((socket, next) => {
+  if (process.env.AUTH_DISABLED === 'true') return next();
+  const token = socket.handshake.auth?.token
+    || (socket.handshake.headers?.authorization || '').replace('Bearer ', '');
+  if (!token || !verifyToken(token)) return next(new Error('Unauthorized'));
+  next();
 });
 
 io.on('connection', (socket) => {

@@ -3,8 +3,13 @@ import { logger } from '../app.js';
 import { flowEngine } from '../flow/engine.js';
 import { renderFlowTemplate } from '../flow/template.js';
 
+const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function getNestedValue(obj, path) {
-  return path.split('.').reduce((cur, key) => (cur != null ? cur[key] : undefined), obj);
+  return path.split('.').reduce((cur, key) => {
+    if (cur == null || BLOCKED_KEYS.has(key)) return undefined;
+    return cur[key];
+  }, obj);
 }
 
 export const handleWebhook = async (req, res) => {

@@ -1,67 +1,212 @@
 # WAAI Flow
 
-Open-source WhatsApp AI automation platform with visual flows, agents, sessions, broadcasts, webhooks, analytics, file management, and advanced Baileys message features.
+Open-source WhatsApp AI automation platform — visual flow builder, AI agents, multi-session management, broadcasts, webhooks, and real-time analytics.
 
-Maintainer: **ZQ Developers**
+**Maintainer:** ZQ Developers &nbsp;|&nbsp; **Support:** +923144916432
 
-Support WhatsApp: **+923144916432**
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/zqdevelopers/waai-flow?style=social)](https://github.com/zqdevelopers/waai-flow/stargazers)
+[![Issues](https://img.shields.io/github/issues/zqdevelopers/waai-flow)](https://github.com/zqdevelopers/waai-flow/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-## Features
+---
 
-- WhatsApp session QR login
-- Visual flow builder with webhook, AI chat, and send-message nodes
-- AI agents and AI provider management
-- Executions, conversations, messages, broadcasts, webhooks, REST API docs
-- Files, analytics, settings, environment, and logs pages
-- Login-protected dashboard and APIs
-- Dark and light modes with WhatsApp-style green UI
-- Advanced `@innovatorssoft/baileys` support:
-  - Text, image, video, audio, gif, document, location, contacts, polls, stickers
-  - Buttons, URL buttons, copy buttons, lists, native flow, rich messages
-  - Scheduler, auto-replies, anti-delete store, message search, typing indicator
-  - JID plotting, vCard generation, status posting, group actions, privacy actions
+## Feature Status
+
+Honest status for every feature. Use this to set expectations before deploying.
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Fully working |
+| 🟡 | Partial — works but has known gaps (see notes) |
+| ❌ | Missing — not yet implemented |
+| 🗺️ | Roadmap — planned for a future release |
+| 🏢 | Requires WhatsApp Business API |
+
+### Core Automation
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Visual Flow Builder | ✅ | Drag-and-drop canvas with 8+ node types |
+| Webhook trigger node | 🟡 | Keyword filter works in backend; UI input field not yet added |
+| AI Chat node | ✅ | Uses any configured provider (OpenAI, Anthropic, etc.) |
+| Send Message node | ✅ | All 14 message types: text, image, video, audio, gif, document, location, contacts, sticker, poll, buttons, list, URL buttons, native flow |
+| Condition node | ✅ | Branches flow on variable equality |
+| Delay node | ✅ | Up to 30 s per node |
+| Set Variable / Text Formatter | ✅ | Template variables via `{{variable.path}}` |
+| HTTP Request node | ✅ | GET / POST / PUT / DELETE with headers and body |
+| Flow import / export | ❌ | Cannot share flows as JSON files yet |
+| Flow duplicate / clone | ❌ | Must recreate manually |
+| Flow version history | 🗺️ | Planned — save snapshot on every update |
+
+### WhatsApp Sessions
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| QR code login | ✅ | |
+| Multi-session support | ✅ | Unlimited sessions |
+| Auto-reconnect with backoff | ✅ | 5 attempts: 1 s → 2 s → 4 s → 8 s → 16 s, then stops |
+| QR expiry indicator | ❌ | No countdown; QR expires in ~20 s with no visual feedback |
+| Session rename | ❌ | Names are immutable after creation |
+| Profile picture upload | 🟡 | Baileys supports it; may be restricted on personal accounts |
+
+### Broadcasts
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Create broadcast | ✅ | |
+| Run broadcast | ✅ | Non-blocking; frontend polls for progress |
+| Edit draft broadcast | ❌ | No PUT endpoint; delete and recreate |
+| Cancel running broadcast | ❌ | Runs to completion once started |
+| Broadcast message types | 🟡 | Text only; image/button/list not yet supported |
+| Scheduled broadcasts | 🗺️ | Planned — send at a specified date and time |
+| Per-recipient delivery tracking | 🗺️ | Planned — see sent / failed / pending per number |
+
+### AI & Agents
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| OpenAI integration | ✅ | GPT-4o, GPT-4 Turbo, etc. |
+| Anthropic Claude | ✅ | Via configured provider |
+| Custom AI providers | ✅ | Add base URL + API key in Settings |
+| Agent profiles page | 🟡 | Profiles exist but are **not linked** to Flow Builder AI Chat nodes |
+| AI flow generator | 🗺️ | Describe a flow in plain language → auto-generate nodes |
+
+### Messaging & Conversations
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Send all message types via API | ✅ | 14 types supported |
+| Conversation inbox (read) | ✅ | |
+| Reply from inbox | ✅ | |
+| Real-time incoming message push | ❌ | Must refresh manually to see new messages |
+| Message search | ✅ | In-memory Baileys message store |
+| Pagination on messages/conversations | ❌ | Hard-capped at 200 / 500 records |
+| Contact manager | 🗺️ | Planned — tag, search, block / unblock contacts |
+
+### Webhooks
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Inbound webhook trigger | ✅ | `POST /api/webhook/:flowId` |
+| Webhook secret validation | ✅ | `x-webhook-secret` header check |
+| Variable mappings on trigger | ✅ | Map payload paths to flow variables |
+| GET webhook support | ❌ | Some services send GET for handshake; not handled |
+| Per-flow rate limiting | ❌ | Only global 300 req/min limiter |
+| Webhook retry queue | 🗺️ | Planned — retry failed HTTP Request nodes with backoff |
+
+### Platform — WhatsApp Business Only
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Native message templates | 🏢 | Requires WA Business API approval |
+| PIX payment messages | 🏢 | Brazil only; WA Business API |
+| WhatsApp Shop / catalog | 🏢 | WA Business API with catalog access |
+| LaTeX image rendering | 🗺️ | Requires external image generation service |
+
+---
+
+## Known Issues
+
+These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are resolved in the latest commit.
+
+| Issue | Severity | Status |
+|-------|----------|--------|
+| All active flows fired on every incoming message (no filter) | Critical | ✅ Fixed — keyword filter added |
+| Session reconnect looped forever on bad credentials | Critical | ✅ Fixed — exponential backoff, max 5 retries |
+| Socket.io connections were unauthenticated (QR/logs leaked) | High | ✅ Fixed — `io.use()` JWT middleware added |
+| `saveAutoReplyRules` leaked timers on every save | High | ✅ Fixed — old instances stopped before replacing |
+| Prototype pollution via `__proto__` in webhook payloads | Medium | ✅ Fixed — blocked in template engine and webhook controller |
+| `ecosystem.config.cjs` hardcoded `PORT: 3000`, broke Railway PM2 mode | Medium | ✅ Fixed — removed hardcoded port |
+| `runFlow` accumulates Socket.io listeners on repeated clicks | High | Open |
+| Background broadcast loop can call `process.exit(1)` mid-run | High | Open |
+| Webhook silently skips secret check on corrupt flow JSON | Medium | Open |
+| `connectDB()` `.catch()` in app.js is unreachable dead code | Low | Open |
+| Flow activate/deactivate toggle requires manual Save — no auto-save | Low | Open |
+| `useSessions` hook never refreshes after mount | Low | Open |
+| Messages/conversations hard-capped, no pagination | Low | Open |
+
+> [!TIP]
+> To report a new issue, open a [GitHub Issue](https://github.com/zqdevelopers/waai-flow/issues).
+
+---
+
+## Roadmap
+
+### Near Term
+
+- [ ] Keyword / regex filter UI for webhook_trigger node
+- [ ] Edit draft broadcasts (`PUT /modules/broadcasts/:id`)
+- [ ] Cancel running broadcast
+- [ ] Broadcast message type selector (image, buttons, list)
+- [ ] Link Agent profiles to Flow Builder AI Chat node
+- [ ] Flow delete + duplicate buttons in sidebar
+- [ ] Flow export / import as JSON
+- [ ] QR code expiry countdown
+- [ ] Pagination on messages and conversations
+
+### ⭐ 50-Star Milestone
+
+> These features will be built when this repo reaches **50 GitHub stars**.
+> [Star the repo](https://github.com/zqdevelopers/waai-flow/stargazers) to make it happen.
+
+- [ ] **Multi-user support** — team members with role-based access (admin / operator / viewer)
+- [ ] **Flow marketplace** — export flows as `.waai.json`, share community templates
+- [ ] **AI flow generator** — describe a flow in plain English, get nodes auto-generated
+- [ ] **Scheduled broadcasts** — pick a date and time, run automatically
+- [ ] **Real-time conversation inbox** — new messages push via Socket.io, unread badge in nav
+- [ ] **Per-flow analytics** — trigger count, success rate, node error heatmap on canvas
+- [ ] **n8n / Make / Zapier integration** — standardized webhook in/out format
+- [ ] **WhatsApp contact manager** — view, search, tag, block / unblock contacts
+- [ ] **Docker Compose + Postgres stack** — one-command self-host with durable database
+- [ ] **Broadcast analytics** — per-recipient sent / failed / pending tracking
+
+---
 
 ## Tech Stack
 
-- Backend: Node.js, Express, Prisma, SQLite, Socket.IO
-- WhatsApp: `@innovatorssoft/baileys`
-- Frontend: React, Vite, Tailwind CSS, React Flow, Recharts
-- Deployment: PM2 or Docker Compose
+| Layer | Stack |
+|-------|-------|
+| Backend | Node.js 22, Express, Prisma, SQLite |
+| WhatsApp | `@innovatorssoft/baileys` |
+| Frontend | React 18, Vite, Tailwind CSS, React Flow, Recharts |
+| Auth | Custom HMAC-SHA256 JWT (no external dependency) |
+| Real-time | Socket.IO |
+| Deployment | PM2 or Docker |
+
+---
 
 ## Requirements
 
 - Node.js 22+
 - npm
-- SQLite
+
+---
 
 ## Quick Start
-
-Install all dependencies:
 
 ```bash
 npm run install:all
 ```
 
-Create backend environment file:
+Copy the environment template:
 
 ```bash
-cp backend/.env.example backend/.env
+cp .env.example backend/.env
 ```
 
-Edit `backend/.env` and change:
+Edit `backend/.env`:
 
 ```env
-ADMIN_USERNAME="admin"
-ADMIN_PASSWORD="change-this-password"
-AUTH_SECRET="change-this-to-a-long-random-secret"
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password
+AUTH_SECRET=replace-with-a-long-random-string
 ```
 
 Initialize the database:
 
 ```bash
-cd backend
-npx prisma db push
-cd ..
+cd backend && npx prisma db push && cd ..
 ```
 
 Start development servers:
@@ -70,149 +215,106 @@ Start development servers:
 npm run dev
 ```
 
-Open:
-
 - Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3000`
+- Backend API: `http://localhost:3000`
 
-## Default Login
+Default login: `admin` / `your-strong-password`
 
-If you keep the example defaults:
-
-- Username: `admin`
-- Password: `change-this-password`
-
-For local development in the current workspace, the previous default may be `admin123`. Always set your own password before publishing or deployment.
-
-## Environment
-
-Backend template:
-
-```bash
-backend/.env.example
-```
-
-Frontend template:
-
-```bash
-frontend/.env.example
-```
-
-Do not commit real `.env` files.
+---
 
 ## Scripts
 
 ```bash
-npm run install:all
-npm run dev
-npm run build
-npm run start
-npm run stop
-npm run logs
+npm run install:all   # Install all dependencies (root + backend + frontend)
+npm run dev           # Start dev servers (hot reload)
+npm run build         # Build frontend for production
+npm run start         # Start both apps with PM2
+npm run stop          # Stop PM2 processes
+npm run logs          # Tail PM2 logs
 ```
 
-## Production With PM2
+---
 
-Build frontend:
+## Production with PM2
 
 ```bash
 npm run build
-```
-
-Start both apps:
-
-```bash
 npm run start
-```
-
-View logs:
-
-```bash
 npm run logs
 ```
 
-## Docker Compose
+---
+
+## Docker
 
 ```bash
 docker compose up --build
 ```
 
-Before using Docker publicly, configure environment variables and persistent volumes for database, sessions, and uploads.
+Configure environment variables and persistent volumes for database, sessions, and uploads before deploying publicly.
 
-## Deploy On Render
+---
 
-This repo includes `render.yaml` for a one-service Render deploy. The backend serves the API and the built React dashboard from the same public URL.
+## Deploy on Render
 
-1. Push this repository to GitHub.
-2. Open Render Dashboard and choose **New** -> **Blueprint**.
-3. Connect `zqdevelopers/waai-flow`.
-4. Select the `main` branch and apply the detected `render.yaml`.
-5. Add secret values when Render asks:
+This repo includes `render.yaml` for a single-service deploy.
+
+1. Push to GitHub.
+2. In Render: **New → Blueprint → Connect `zqdevelopers/waai-flow`**.
+3. Set secret env vars when prompted:
 
 ```env
 ADMIN_USERNAME=your-admin-user
 ADMIN_PASSWORD=your-strong-password
+AUTH_SECRET=your-long-random-secret
 ```
 
-Render will run:
+Render free tier does not have a durable filesystem — SQLite data, session files, and uploads are lost on restart. Use a paid service with a persistent disk and set `DATA_PATH` to the disk mount path for a stable instance.
 
-```bash
-npm run render:build
-npm run render:start
-```
+---
 
-After deploy, open the Render URL and log in with your admin credentials.
+## Deploy on Replit
 
-Free Render services can run WAAI Flow for demos, but their local filesystem is not durable. That means SQLite data, uploaded files, and WhatsApp session files can be lost after restarts or redeploys. For a real public instance, use a paid Render service with a persistent disk and set `DATA_DIR` to the disk mount path, or migrate the app database to a managed database.
-
-## Deploy On Replit
-
-This repo includes `.replit` for Replit deployments. The same one-service production mode is used: Express serves the API and the built React dashboard.
-
-1. In Replit, choose **Create App** -> **Import from GitHub**.
-2. Import `https://github.com/zqdevelopers/waai-flow`.
-3. Open **Secrets** and add:
+1. **Create App → Import from GitHub** → `https://github.com/zqdevelopers/waai-flow`
+2. Add Secrets:
 
 ```env
 DATABASE_URL=file:./dev.db
 ADMIN_USERNAME=your-admin-user
 ADMIN_PASSWORD=your-strong-password
 AUTH_SECRET=your-long-random-secret
-AUTH_TOKEN_TTL_MS=86400000
-PROJECT_OWNER_NAME=ZQ Developers
-PROJECT_SUPPORT_WHATSAPP=+923144916432
 ```
 
-4. Open the Shell and run once:
+3. Run once in Shell: `npm run render:build`
+4. Click **Run**, then **Publish → Reserved VM**.
 
-```bash
-npm run render:build
-```
+Reserved VM is strongly recommended over Autoscale — Autoscale can idle and disconnect WhatsApp sessions.
 
-5. Click **Run** to test the app.
-6. Click **Publish** and choose an **Autoscale** or **Reserved VM** deployment.
-
-For WAAI Flow, **Reserved VM** is the better Replit option if you want WhatsApp sessions to stay connected. Autoscale can idle and restart, which may disconnect WhatsApp sessions. Replit's built-in SQL database is PostgreSQL, while this project currently uses SQLite, so keep `DATABASE_URL=file:./dev.db` unless you migrate the Prisma schema to PostgreSQL.
+---
 
 ## GitHub Upload Checklist
 
-Before pushing:
+- [ ] Change `ADMIN_PASSWORD` and `AUTH_SECRET` in your deployed `.env`
+- [ ] Replace support WhatsApp number in `README.md` and `SUPPORT.md`
+- [ ] Confirm `.env`, `sessions/`, `uploads/`, `node_modules/`, `dist/`, and `*.db` are in `.gitignore`
+- [ ] Run `npm run build` before tagging a release
 
-- Replace support WhatsApp number in `README.md`, `SUPPORT.md`, and `backend/.env.example`.
-- Change `ADMIN_PASSWORD` and `AUTH_SECRET` in your deployed `.env`.
-- Confirm `.env`, `sessions`, `uploads`, `node_modules`, `dist`, and SQLite database files are not committed.
-- Run:
-
-```bash
-npm run build
-```
+---
 
 ## Important Notice
 
-This project uses Baileys for WhatsApp Web automation and is in no way affiliated with or endorsed by WhatsApp. Use it at your own discretion. Do not spam people with this project. We discourage any stalkerware, abusive bulk messaging, scraping, or automated messaging usage that violates consent, privacy, platform terms, or local law.
+This project uses Baileys for WhatsApp Web automation and is in no way affiliated with or endorsed by WhatsApp Inc. Do not use this project to spam, harass, or scrape. We do not condone use that violates WhatsApp Terms of Service, consent, privacy, or local law. Use responsibly.
 
-Liability and license: Baileys and its maintainers cannot be held liable for misuse of this application, as stated in the Baileys MIT license. The maintainers of Baileys do not condone use of this application in practices that violate WhatsApp Terms of Service. Use this application fairly, as it is intended to be used.
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security
+
+See [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT. See `LICENSE`.
+MIT — see [LICENSE](LICENSE).

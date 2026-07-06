@@ -47,6 +47,7 @@ class BaileysService {
     this.autoReplies = new Map();
     this.typingIndicators = new Map();
     this.readReceipts = new Map();
+    this.retryCounts = new Map();
     this.messageStore = new MessageStore({ maxMessagesPerChat: 1000, ttl: 7 * 24 * 60 * 60 * 1000 });
     this.search = createMessageSearch();
   }
@@ -119,13 +120,29 @@ class BaileysService {
         io.emit('status', { sessionId, status: newStatus });
 
         if (shouldReconnect) {
-          this.startSession(sessionId);
+          const attempts = (this.retryCounts.get(sessionId) || 0) + 1;
+          if (attempts > 5) {
+            logger.error(`Session ${sessionId} failed to reconnect after 5 attempts. Stopping.`);
+            this.retryCounts.delete(sessionId);
+            this.sessions.delete(sessionId);
+            await prisma.session.update({ where: { sessionId }, data: { status: 'DISCONNECTED' } }).catch(() => {});
+            io.emit(`status-${sessionId}`, { status: 'DISCONNECTED' });
+            io.emit('status', { sessionId, status: 'DISCONNECTED' });
+          } else {
+            this.retryCounts.set(sessionId, attempts);
+            const delay = Math.min(1000 * Math.pow(2, attempts - 1), 30000);
+            logger.info(`Session ${sessionId} reconnecting in ${delay}ms (attempt ${attempts}/5)`);
+            this.sessions.delete(sessionId);
+            setTimeout(() => this.startSession(sessionId), delay);
+          }
         } else {
+          this.retryCounts.delete(sessionId);
           this.sessions.delete(sessionId);
           fs.rmSync(sessionDir, { recursive: true, force: true });
         }
       } else if (connection === 'open') {
         logger.info(`Session ${sessionId} opened.`);
+        this.retryCounts.delete(sessionId);
         this.qrCache.delete(sessionId);
         await prisma.session.update({
           where: { sessionId },
@@ -378,6 +395,11 @@ class BaileysService {
       create: { key: 'automation.autoReplies', value: JSON.stringify(rules) }
     });
     for (const [sessionId, sock] of this.sessions.entries()) {
+      this.schedulers.get(sessionId)?.stop();
+      this.schedulers.delete(sessionId);
+      this.autoReplies.delete(sessionId);
+      this.typingIndicators.delete(sessionId);
+      this.readReceipts.delete(sessionId);
       await this.setupSessionUtilities(sessionId, sock);
     }
     return rules;
@@ -543,12 +565,15 @@ class BaileysService {
         include: { Session: { select: { id: true, sessionId: true, name: true, status: true } } }
       });
       for (const flow of flows) {
-        const nodes = JSON.parse(flow.nodes || '[]');
-        const hasTrigger = nodes.some((node) => {
+        let nodes = [];
+        try { nodes = JSON.parse(flow.nodes || '[]'); } catch { continue; }
+        const triggerNode = nodes.find((node) => {
           const type = node?.data?.pluginType || node?.data?.type || node?.type || '';
-          return type.includes('trigger') || type === 'webhook_trigger';
+          return type === 'webhook_trigger' || type.includes('trigger');
         });
-        if (!hasTrigger) continue;
+        if (!triggerNode) continue;
+        const keyword = triggerNode.data?.keyword?.trim();
+        if (keyword && !text.toLowerCase().includes(keyword.toLowerCase())) continue;
         flowEngine.execute(flow, {
           sender: remoteJid,
           message: text,
