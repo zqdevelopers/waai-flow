@@ -13,14 +13,12 @@ Open-source WhatsApp AI automation platform — visual flow builder, AI agents, 
 
 ## Feature Status
 
-Honest status for every feature. Use this to set expectations before deploying.
-
 | Symbol | Meaning |
 |--------|---------|
 | ✅ | Fully working |
-| 🟡 | Partial — works but has known gaps (see notes) |
-| ❌ | Missing — not yet implemented |
-| 🗺️ | Roadmap — planned for a future release |
+| 🟡 | Partial — works but has known gaps |
+| ❌ | Not yet implemented |
+| 🗺️ | Planned for a future release |
 | 🏢 | Requires WhatsApp Business API |
 
 ### Core Automation
@@ -28,16 +26,16 @@ Honest status for every feature. Use this to set expectations before deploying.
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Visual Flow Builder | ✅ | Drag-and-drop canvas with 8+ node types |
-| Webhook trigger node | 🟡 | Keyword filter works in backend; UI input field not yet added |
-| AI Chat node | ✅ | Uses any configured provider (OpenAI, Anthropic, etc.) |
-| Send Message node | ✅ | All 14 message types: text, image, video, audio, gif, document, location, contacts, sticker, poll, buttons, list, URL buttons, native flow |
-| Condition node | ✅ | Branches flow on variable equality |
+| Webhook trigger node | 🟡 | Keyword filter active in backend; UI config field coming soon |
+| AI Chat node | ✅ | Works with any configured provider |
+| Send Message node | ✅ | 14 types: text, image, video, audio, gif, document, location, contacts, sticker, poll, buttons, list, URL buttons, native flow |
+| Condition node | ✅ | Branch flow on variable equality |
 | Delay node | ✅ | Up to 30 s per node |
-| Set Variable / Text Formatter | ✅ | Template variables via `{{variable.path}}` |
+| Set Variable / Text Formatter | ✅ | `{{variable.path}}` template syntax |
 | HTTP Request node | ✅ | GET / POST / PUT / DELETE with headers and body |
-| Flow import / export | ❌ | Cannot share flows as JSON files yet |
-| Flow duplicate / clone | ❌ | Must recreate manually |
-| Flow version history | 🗺️ | Planned — save snapshot on every update |
+| Flow import / export | ❌ | Coming soon |
+| Flow duplicate / clone | ❌ | Coming soon |
+| Flow version history | 🗺️ | Planned |
 
 ### WhatsApp Sessions
 
@@ -46,21 +44,20 @@ Honest status for every feature. Use this to set expectations before deploying.
 | QR code login | ✅ | |
 | Multi-session support | ✅ | Unlimited sessions |
 | Auto-reconnect with backoff | ✅ | 5 attempts: 1 s → 2 s → 4 s → 8 s → 16 s, then stops |
-| QR expiry indicator | ❌ | No countdown; QR expires in ~20 s with no visual feedback |
-| Session rename | ❌ | Names are immutable after creation |
-| Profile picture upload | 🟡 | Baileys supports it; may be restricted on personal accounts |
+| QR expiry indicator | ❌ | Coming soon |
+| Session rename | ❌ | Coming soon |
+| Profile picture upload | 🟡 | Supported via Baileys; may be restricted on personal accounts |
 
 ### Broadcasts
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Create broadcast | ✅ | |
-| Run broadcast | ✅ | Non-blocking; frontend polls for progress |
-| Edit draft broadcast | ❌ | No PUT endpoint; delete and recreate |
-| Cancel running broadcast | ❌ | Runs to completion once started |
-| Broadcast message types | 🟡 | Text only; image/button/list not yet supported |
-| Scheduled broadcasts | 🗺️ | Planned — send at a specified date and time |
-| Per-recipient delivery tracking | 🗺️ | Planned — see sent / failed / pending per number |
+| Create & run broadcast | ✅ | Non-blocking; frontend polls for progress |
+| Edit draft broadcast | ❌ | Coming soon |
+| Cancel running broadcast | ❌ | Coming soon |
+| Broadcast message types | 🟡 | Text only currently; image/button/list coming soon |
+| Scheduled broadcasts | 🗺️ | Planned |
+| Per-recipient delivery tracking | 🗺️ | Planned |
 
 ### AI & Agents
 
@@ -69,33 +66,32 @@ Honest status for every feature. Use this to set expectations before deploying.
 | OpenAI integration | ✅ | GPT-4o, GPT-4 Turbo, etc. |
 | Anthropic Claude | ✅ | Via configured provider |
 | Custom AI providers | ✅ | Add base URL + API key in Settings |
-| Agent profiles page | 🟡 | Profiles exist but are **not linked** to Flow Builder AI Chat nodes |
-| AI flow generator | 🗺️ | Describe a flow in plain language → auto-generate nodes |
+| Agent profiles page | 🟡 | Profiles exist but not yet linked to Flow Builder AI Chat nodes |
+| AI flow generator | 🗺️ | Planned — describe in plain language, get nodes auto-generated |
 
 ### Messaging & Conversations
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Send all message types via API | ✅ | 14 types supported |
-| Conversation inbox (read) | ✅ | |
-| Reply from inbox | ✅ | |
-| Real-time incoming message push | ❌ | Must refresh manually to see new messages |
+| Send all message types via API | ✅ | 14 types |
+| Conversation inbox (read + reply) | ✅ | |
+| Real-time incoming message push | ❌ | Coming soon |
 | Message search | ✅ | In-memory Baileys message store |
-| Pagination on messages/conversations | 🟡 | Backend supports `?limit=` and `?cursor=`; frontend load-more UI not yet added |
-| Contact manager | 🗺️ | Planned — tag, search, block / unblock contacts |
+| Paginated messages/conversations | 🟡 | Backend supports `?limit=` and `?cursor=`; frontend load-more UI coming soon |
+| Contact manager | 🗺️ | Planned |
 
 ### Webhooks
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Inbound webhook trigger | ✅ | `POST /api/webhook/:flowId` |
-| Webhook secret validation | ✅ | `x-webhook-secret` header check |
+| Webhook secret validation | ✅ | `x-webhook-secret` header |
 | Variable mappings on trigger | ✅ | Map payload paths to flow variables |
-| GET webhook support | ❌ | Some services send GET for handshake; not handled |
-| Per-flow rate limiting | ❌ | Only global 300 req/min limiter |
-| Webhook retry queue | 🗺️ | Planned — retry failed HTTP Request nodes with backoff |
+| GET webhook support | ❌ | Coming soon |
+| Per-flow rate limiting | ❌ | Coming soon |
+| Webhook retry queue | 🗺️ | Planned |
 
-### Platform — WhatsApp Business Only
+### WhatsApp Business Only
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -108,26 +104,9 @@ Honest status for every feature. Use this to set expectations before deploying.
 
 ## Known Issues
 
-These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are resolved in the latest commit.
-
-| Issue | Severity | Status |
-|-------|----------|--------|
-| All active flows fired on every incoming message (no filter) | Critical | ✅ Fixed — keyword filter added |
-| Session reconnect looped forever on bad credentials | Critical | ✅ Fixed — exponential backoff, max 5 retries |
-| Socket.io connections were unauthenticated (QR/logs leaked) | High | ✅ Fixed — `io.use()` JWT middleware added |
-| `saveAutoReplyRules` leaked timers on every save | High | ✅ Fixed — old instances stopped before replacing |
-| Prototype pollution via `__proto__` in webhook payloads | Medium | ✅ Fixed — blocked in template engine and webhook controller |
-| `ecosystem.config.cjs` hardcoded `PORT: 3000`, broke Railway PM2 mode | Medium | ✅ Fixed — removed hardcoded port |
-| `runFlow` accumulates Socket.io listeners on repeated clicks | High | ✅ Fixed — `logHandlerRef` removes old listener before each run |
-| Background broadcast loop can call `process.exit(1)` mid-run | High | ✅ Fixed — loop isolated in async IIFE with its own catch |
-| Webhook silently skips secret check on corrupt flow JSON | Medium | ✅ Fixed — returns 400 instead of swallowing parse error |
-| `connectDB()` `.catch()` in app.js is unreachable dead code | Low | ✅ Fixed — rethrows so app.js catch fires correctly |
-| Flow activate/deactivate toggle requires manual Save — no auto-save | Low | ✅ Fixed — toggle saves immediately, reverts on error |
-| `useSessions` hook never refreshes after mount | Low | ✅ Fixed — polls every 30 s, clears on unmount |
-| Messages/conversations hard-capped, no pagination | Low | ✅ Fixed — `?limit=` and `?cursor=` params accepted |
-
-> [!TIP]
-> To report a new issue, open a [GitHub Issue](https://github.com/zqdevelopers/waai-flow/issues).
+> ✅ All 13 confirmed bugs from the v1.0.0 audit have been resolved. No open issues at this time.
+>
+> Found something? [Open an issue →](https://github.com/zqdevelopers/waai-flow/issues)
 
 ---
 
@@ -135,7 +114,7 @@ These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are
 
 ### Near Term
 
-- [ ] Keyword / regex filter UI for webhook_trigger node
+- [ ] Keyword / regex filter UI for webhook trigger node
 - [ ] Edit draft broadcasts (`PUT /modules/broadcasts/:id`)
 - [ ] Cancel running broadcast
 - [ ] Broadcast message type selector (image, buttons, list)
@@ -143,21 +122,22 @@ These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are
 - [ ] Flow delete + duplicate buttons in sidebar
 - [ ] Flow export / import as JSON
 - [ ] QR code expiry countdown
+- [ ] Real-time conversation inbox (Socket.io push)
 - [ ] Pagination load-more UI (backend already supports `?limit=` and `?cursor=`)
 
 ### ⭐ 50-Star Milestone
 
 > These features will be built when this repo reaches **50 GitHub stars**.
-> [Star the repo](https://github.com/zqdevelopers/waai-flow/stargazers) to make it happen.
+> [Star to unlock →](https://github.com/zqdevelopers/waai-flow/stargazers)
 
-- [ ] **Multi-user support** — team members with role-based access (admin / operator / viewer)
-- [ ] **Flow marketplace** — export flows as `.waai.json`, share community templates
-- [ ] **AI flow generator** — describe a flow in plain English, get nodes auto-generated
-- [ ] **Scheduled broadcasts** — pick a date and time, run automatically
-- [ ] **Real-time conversation inbox** — new messages push via Socket.io, unread badge in nav
-- [ ] **Per-flow analytics** — trigger count, success rate, node error heatmap on canvas
+- [ ] **Multi-user support** — roles: admin / operator / viewer
+- [ ] **Flow marketplace** — export / import `.waai.json` community templates
+- [ ] **AI flow generator** — describe a flow in plain English, get nodes auto-built
+- [ ] **Scheduled broadcasts** — send at a specified date and time
+- [ ] **Real-time conversation inbox** — Socket.io push, unread badge in nav
+- [ ] **Per-flow analytics** — trigger count, success rate, node error heatmap
 - [ ] **n8n / Make / Zapier integration** — standardized webhook in/out format
-- [ ] **WhatsApp contact manager** — view, search, tag, block / unblock contacts
+- [ ] **WhatsApp contact manager** — tag, search, block / unblock contacts
 - [ ] **Docker Compose + Postgres stack** — one-command self-host with durable database
 - [ ] **Broadcast analytics** — per-recipient sent / failed / pending tracking
 
@@ -165,14 +145,14 @@ These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are
 
 ## Tech Stack
 
-| Layer | Stack |
-|-------|-------|
+| Layer | Technology |
+|-------|-----------|
 | Backend | Node.js 22, Express, Prisma, SQLite |
 | WhatsApp | `@innovatorssoft/baileys` |
 | Frontend | React 18, Vite, Tailwind CSS, React Flow, Recharts |
-| Auth | Custom HMAC-SHA256 JWT (no external dependency) |
+| Auth | Custom HMAC-SHA256 JWT |
 | Real-time | Socket.IO |
-| Deployment | PM2 or Docker |
+| Deployment | PM2, Docker, Railway, Render, Replit |
 
 ---
 
@@ -185,31 +165,34 @@ These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are
 
 ## Quick Start
 
+**1. Install dependencies**
+
 ```bash
 npm run install:all
 ```
 
-Copy the environment template:
+**2. Configure environment**
 
 ```bash
-cp .env.example backend/.env
+cp .env.example .env
 ```
 
-Edit `backend/.env`:
+Edit `.env`:
 
 ```env
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=your-strong-password
 AUTH_SECRET=replace-with-a-long-random-string
+DATABASE_URL=file:./data/db.sqlite
 ```
 
-Initialize the database:
+**3. Initialize database**
 
 ```bash
 cd backend && npx prisma db push && cd ..
 ```
 
-Start development servers:
+**4. Start development servers**
 
 ```bash
 npm run dev
@@ -218,40 +201,43 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:3000`
 
-Default login: `admin` / `your-strong-password`
+Login: `admin` / `your-strong-password`
 
 ---
 
 ## Scripts
 
-```bash
-npm run install:all   # Install all dependencies (root + backend + frontend)
-npm run dev           # Start dev servers (hot reload)
-npm run build         # Build frontend for production
-npm run start         # Start both apps with PM2
-npm run stop          # Stop PM2 processes
-npm run logs          # Tail PM2 logs
-```
+| Command | Description |
+|---------|-------------|
+| `npm run install:all` | Install all dependencies |
+| `npm run dev` | Start both servers with hot reload |
+| `npm run build` | Build frontend for production |
+| `npm run start` | Start with PM2 (production) |
+| `npm run stop` | Stop PM2 processes |
+| `npm run logs` | Tail PM2 logs |
 
 ---
 
-## Production with PM2
+## Deploy on Railway
 
-```bash
-npm run build
-npm run start
-npm run logs
+This repo includes `railway.json` for Railway deploys.
+
+1. Push to GitHub.
+2. In Railway: **New Project → Deploy from GitHub repo**.
+3. Connect `zqdevelopers/waai-flow`.
+4. Add environment variables in Railway **Variables**:
+
+```env
+ADMIN_USERNAME=your-admin-user
+ADMIN_PASSWORD=your-strong-password
+AUTH_SECRET=your-long-random-secret
+DATABASE_URL=file:./data/db.sqlite
+DATA_PATH=./data
 ```
 
----
+5. Railway auto-detects the `Dockerfile` and deploys. Health check runs at `/api/status`.
 
-## Docker
-
-```bash
-docker compose up --build
-```
-
-Configure environment variables and persistent volumes for database, sessions, and uploads before deploying publicly.
+> For persistent data, add a Railway Volume mounted at `/app/data` and set `DATA_PATH=/app/data`.
 
 ---
 
@@ -269,7 +255,7 @@ ADMIN_PASSWORD=your-strong-password
 AUTH_SECRET=your-long-random-secret
 ```
 
-Render free tier does not have a durable filesystem — SQLite data, session files, and uploads are lost on restart. Use a paid service with a persistent disk and set `DATA_PATH` to the disk mount path for a stable instance.
+> Render free tier does not persist the filesystem — SQLite, session files, and uploads are lost on restart. Use a paid service with a persistent disk and set `DATA_PATH` to the mount path.
 
 ---
 
@@ -286,16 +272,26 @@ AUTH_SECRET=your-long-random-secret
 ```
 
 3. Run once in Shell: `npm run render:build`
-4. Click **Run**, then **Publish → Reserved VM**.
+4. Click **Run** → **Publish → Reserved VM**
 
-Reserved VM is strongly recommended over Autoscale — Autoscale can idle and disconnect WhatsApp sessions.
+> Use Reserved VM, not Autoscale — Autoscale can idle and disconnect active WhatsApp sessions.
 
 ---
 
-## GitHub Upload Checklist
+## Docker
 
-- [ ] Change `ADMIN_PASSWORD` and `AUTH_SECRET` in your deployed `.env`
-- [ ] Replace support WhatsApp number in `README.md` and `SUPPORT.md`
+```bash
+docker compose up --build
+```
+
+Set environment variables and mount a persistent volume for `/app/data` before deploying publicly.
+
+---
+
+## Pre-deploy Checklist
+
+- [ ] Set `ADMIN_PASSWORD` and `AUTH_SECRET` to strong unique values
+- [ ] Replace the support WhatsApp number in `README.md` and `SUPPORT.md`
 - [ ] Confirm `.env`, `sessions/`, `uploads/`, `node_modules/`, `dist/`, and `*.db` are in `.gitignore`
 - [ ] Run `npm run build` before tagging a release
 
@@ -303,7 +299,7 @@ Reserved VM is strongly recommended over Autoscale — Autoscale can idle and di
 
 ## Important Notice
 
-This project uses Baileys for WhatsApp Web automation and is in no way affiliated with or endorsed by WhatsApp Inc. Do not use this project to spam, harass, or scrape. We do not condone use that violates WhatsApp Terms of Service, consent, privacy, or local law. Use responsibly.
+This project uses Baileys for WhatsApp Web automation and is not affiliated with or endorsed by WhatsApp Inc. Do not use it to spam, harass, or scrape. We do not condone any use that violates WhatsApp Terms of Service, consent, privacy, or local law.
 
 ---
 
