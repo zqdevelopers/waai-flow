@@ -81,7 +81,7 @@ Honest status for every feature. Use this to set expectations before deploying.
 | Reply from inbox | ✅ | |
 | Real-time incoming message push | ❌ | Must refresh manually to see new messages |
 | Message search | ✅ | In-memory Baileys message store |
-| Pagination on messages/conversations | ❌ | Hard-capped at 200 / 500 records |
+| Pagination on messages/conversations | 🟡 | Backend supports `?limit=` and `?cursor=`; frontend load-more UI not yet added |
 | Contact manager | 🗺️ | Planned — tag, search, block / unblock contacts |
 
 ### Webhooks
@@ -118,13 +118,13 @@ These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are
 | `saveAutoReplyRules` leaked timers on every save | High | ✅ Fixed — old instances stopped before replacing |
 | Prototype pollution via `__proto__` in webhook payloads | Medium | ✅ Fixed — blocked in template engine and webhook controller |
 | `ecosystem.config.cjs` hardcoded `PORT: 3000`, broke Railway PM2 mode | Medium | ✅ Fixed — removed hardcoded port |
-| `runFlow` accumulates Socket.io listeners on repeated clicks | High | Open |
-| Background broadcast loop can call `process.exit(1)` mid-run | High | Open |
-| Webhook silently skips secret check on corrupt flow JSON | Medium | Open |
-| `connectDB()` `.catch()` in app.js is unreachable dead code | Low | Open |
-| Flow activate/deactivate toggle requires manual Save — no auto-save | Low | Open |
-| `useSessions` hook never refreshes after mount | Low | Open |
-| Messages/conversations hard-capped, no pagination | Low | Open |
+| `runFlow` accumulates Socket.io listeners on repeated clicks | High | ✅ Fixed — `logHandlerRef` removes old listener before each run |
+| Background broadcast loop can call `process.exit(1)` mid-run | High | ✅ Fixed — loop isolated in async IIFE with its own catch |
+| Webhook silently skips secret check on corrupt flow JSON | Medium | ✅ Fixed — returns 400 instead of swallowing parse error |
+| `connectDB()` `.catch()` in app.js is unreachable dead code | Low | ✅ Fixed — rethrows so app.js catch fires correctly |
+| Flow activate/deactivate toggle requires manual Save — no auto-save | Low | ✅ Fixed — toggle saves immediately, reverts on error |
+| `useSessions` hook never refreshes after mount | Low | ✅ Fixed — polls every 30 s, clears on unmount |
+| Messages/conversations hard-capped, no pagination | Low | ✅ Fixed — `?limit=` and `?cursor=` params accepted |
 
 > [!TIP]
 > To report a new issue, open a [GitHub Issue](https://github.com/zqdevelopers/waai-flow/issues).
@@ -143,7 +143,7 @@ These are confirmed bugs in the current codebase. Fixes marked **✅ Fixed** are
 - [ ] Flow delete + duplicate buttons in sidebar
 - [ ] Flow export / import as JSON
 - [ ] QR code expiry countdown
-- [ ] Pagination on messages and conversations
+- [ ] Pagination load-more UI (backend already supports `?limit=` and `?cursor=`)
 
 ### ⭐ 50-Star Milestone
 
