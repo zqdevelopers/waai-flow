@@ -2,7 +2,7 @@
 
 Open-source WhatsApp AI automation platform — visual flow builder, AI agents, multi-session management, broadcasts, webhooks, and real-time analytics.
 
-**Maintainer:** ZQ Developers &nbsp;|&nbsp; **Support:** +923144916432
+**Maintainer:** ZQ Developers &nbsp;|&nbsp; **Support:** +9233344916432
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/zqdevelopers/waai-flow?style=social)](https://github.com/zqdevelopers/waai-flow/stargazers)
