@@ -43,6 +43,7 @@ class BaileysService {
   constructor() {
     this.sessions = new Map();
     this.qrCache = new Map();
+    this.pairingCodeCache = new Map();
     this.schedulers = new Map();
     this.autoReplies = new Map();
     this.typingIndicators = new Map();
@@ -144,6 +145,7 @@ class BaileysService {
         logger.info(`Session ${sessionId} opened.`);
         this.retryCounts.delete(sessionId);
         this.qrCache.delete(sessionId);
+        this.pairingCodeCache.delete(sessionId);
         await prisma.session.update({
           where: { sessionId },
           data: { status: 'CONNECTED' }
@@ -187,6 +189,34 @@ class BaileysService {
 
     this.sessions.set(sessionId, sock);
     return sock;
+  }
+
+  async requestPairingCode(sessionId, phoneNumber) {
+    const cleanPhone = String(phoneNumber || '').replace(/[^0-9]/g, '');
+    if (!cleanPhone) throw new Error('A valid phone number is required (e.g. 923001234567)');
+
+    let sock = this.sessions.get(sessionId);
+    if (!sock) {
+      sock = await this.startSession(sessionId);
+    }
+
+    if (sock.authState?.creds?.registered) {
+      throw new Error('This session is already linked and registered');
+    }
+
+    // Small delay to ensure socket handshake state
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    try {
+      const code = await sock.requestPairingCode(cleanPhone);
+      this.pairingCodeCache.set(sessionId, code);
+      io.emit(`pairing-${sessionId}`, { code, sessionId });
+      io.emit('pairing-code', { code, sessionId });
+      return { success: true, code, sessionId };
+    } catch (error) {
+      logger.error({ error, sessionId }, 'Failed to request pairing code');
+      throw new Error(error.message || 'Failed to request pairing code');
+    }
   }
 
   async setupSessionUtilities(sessionId, sock) {
@@ -241,6 +271,7 @@ class BaileysService {
       this.sessions.delete(sessionId);
     }
     this.qrCache.delete(sessionId);
+    this.pairingCodeCache.delete(sessionId);
     this.schedulers.get(sessionId)?.stop();
     this.schedulers.delete(sessionId);
     this.autoReplies.delete(sessionId);
@@ -542,19 +573,47 @@ class BaileysService {
   }
 
   async handleIncomingMessage(sessionId, msg, sock) {
-    logger.info(`Message received on ${sessionId}: ${msg.key.remoteJid}`);
     const remoteJid = msg.key.remoteJid;
-    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+    if (!remoteJid || remoteJid === 'status@broadcast') return;
 
-    await prisma.message.create({
-      data: {
+    logger.info(`Message received on ${sessionId}: ${remoteJid}`);
+
+    const m = msg.message || {};
+    const text = m.conversation
+      || m.extendedTextMessage?.text
+      || m.imageMessage?.caption
+      || m.videoMessage?.caption
+      || m.documentMessage?.caption
+      || m.buttonsResponseMessage?.selectedDisplayText
+      || m.listResponseMessage?.title
+      || m.templateButtonReplyMessage?.selectedId
+      || '';
+
+    const sender = msg.key.participant || remoteJid;
+
+    try {
+      const savedMessage = await prisma.message.create({
+        data: {
+          remoteJid,
+          messageId: msg.key.id || `msg-${Date.now()}`,
+          sender,
+          text,
+          timestamp: Math.floor(Date.now() / 1000)
+        }
+      });
+
+      // Emit real-time updates to connected frontend clients
+      io.emit('message:new', savedMessage);
+      io.emit('chat:update', {
         remoteJid,
-        messageId: msg.key.id,
-        sender: msg.key.participant || remoteJid,
-        text,
-        timestamp: Math.floor(Date.now() / 1000)
-      }
-    });
+        sender,
+        lastText: text,
+        lastMessageAt: savedMessage.createdAt,
+        message: savedMessage
+      });
+    } catch (err) {
+      logger.warn({ error: err }, 'Failed to save incoming message to DB');
+    }
 
     try {
       const { flowEngine } = await import('../flow/engine.js');

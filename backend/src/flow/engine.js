@@ -10,7 +10,11 @@ class FlowEngine {
       'webhook trigger': 'webhook_trigger',
       trigger: 'webhook_trigger',
       'send message': 'send_message',
-      'ai chat': 'ai_chat'
+      'ai chat': 'ai_chat',
+      'code': 'code_exec',
+      'code (javascript)': 'code_exec',
+      'poll': 'poll',
+      'whatsapp poll': 'poll'
     };
 
     return node?.data?.pluginType
@@ -42,8 +46,17 @@ class FlowEngine {
         }
       });
 
-      const nodes = JSON.parse(flow.nodes || '[]');
-      const edges = JSON.parse(flow.edges || '[]');
+      // Ensure Session relation is populated if available
+      let hydratedFlow = flow;
+      if (flow.sessionId && !flow.Session) {
+        try {
+          const session = await prisma.session.findUnique({ where: { id: flow.sessionId } });
+          hydratedFlow = { ...flow, Session: session };
+        } catch {}
+      }
+
+      const nodes = JSON.parse(hydratedFlow.nodes || '[]');
+      const edges = JSON.parse(hydratedFlow.edges || '[]');
       
       const triggerNodes = nodes.filter((node) => {
         const pluginType = this.getNodePluginType(node);
@@ -51,24 +64,27 @@ class FlowEngine {
       });
       
       if (triggerNodes.length === 0) {
-        logger.warn(`No trigger found for flow ${flow.id}`);
+        logger.warn(`No trigger found for flow ${hydratedFlow.id}`);
         await pushExecutionLog({ status: 'FAILED', message: 'No trigger node found' });
         await prisma.execution.update({ where: { id: execution.id }, data: { status: 'FAILED' } });
         return { success: false, reason: 'No trigger node found' };
       }
 
       const startNode = triggerNodes[0];
-      const contextVariables = initialContext.variables && typeof initialContext.variables === 'object'
-        ? initialContext.variables
-        : initialContext;
+      const mergedVariables = {
+        ...initialContext,
+        ...(initialContext.variables && typeof initialContext.variables === 'object' ? initialContext.variables : {})
+      };
       
       const ctx = {
-        flow,
+        flow: hydratedFlow,
         whatsapp: baileyService,
         logger,
         pushExecutionLog,
         ...initialContext,
-        variables: contextVariables
+        variables: mergedVariables,
+        _stepCount: 0,
+        _visitedPath: []
       };
 
       await this.traverse(startNode, nodes, edges, ctx);
@@ -90,8 +106,17 @@ class FlowEngine {
   }
 
   async traverse(currentNode, allNodes, allEdges, ctx) {
-    if (!currentNode) return;
+    if (!currentNode || ctx.failed) return;
     
+    ctx._stepCount = (ctx._stepCount || 0) + 1;
+    if (ctx._stepCount > 60) {
+      const err = new Error('Maximum flow step limit (60) exceeded. Potential infinite loop halted.');
+      ctx.failed = true;
+      ctx.error = err.message;
+      await ctx.pushExecutionLog?.({ node: currentNode.id, status: 'FAILED', error: err.message });
+      return;
+    }
+
     const pluginType = this.getNodePluginType(currentNode);
     const plugin = pluginLoader.getPlugin(pluginType);
     if (plugin && typeof plugin.execute === 'function') {
@@ -116,12 +141,11 @@ class FlowEngine {
     }
 
     const outgoingEdges = allEdges.filter(e => e.source === currentNode.id);
-    
     const handleFilter = ctx.nextNodeHandle;
     ctx.nextNodeHandle = null;
 
     for (const edge of outgoingEdges) {
-      if (handleFilter && edge.sourceHandle !== handleFilter) continue;
+      if (handleFilter && edge.sourceHandle && edge.sourceHandle !== handleFilter) continue;
       const nextNode = allNodes.find(n => n.id === edge.target);
       await this.traverse(nextNode, allNodes, allEdges, ctx);
       if (ctx.failed) return;

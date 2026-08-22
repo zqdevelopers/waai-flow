@@ -43,7 +43,9 @@ router.post('/privacy', wrap(modules.privacyAction));
 
 router.get('/broadcasts', wrap(modules.getBroadcasts));
 router.post('/broadcasts', wrap(modules.createBroadcast));
+router.put('/broadcasts/:id', wrap(modules.updateBroadcast));
 router.post('/broadcasts/:id/run', wrap(modules.runBroadcast));
+router.post('/broadcasts/:id/cancel', wrap(modules.cancelBroadcast));
 router.delete('/broadcasts/:id', wrap(modules.deleteBroadcast));
 
 router.get('/webhooks', wrap(modules.getWebhooks));

@@ -7,7 +7,8 @@ export const getSessions = async (req, res) => {
     const sessions = await prisma.session.findMany({ orderBy: { createdAt: 'asc' } });
     const sessionsWithQr = sessions.map(s => ({
       ...s,
-      qr: baileyService.qrCache.get(s.sessionId) || null
+      qr: baileyService.qrCache.get(s.sessionId) || null,
+      pairingCode: baileyService.pairingCodeCache.get(s.sessionId) || null
     }));
     res.json(sessionsWithQr);
   } catch (error) {
@@ -20,7 +21,11 @@ export const getSession = async (req, res) => {
   try {
     const session = await prisma.session.findUnique({ where: { id: req.params.id } });
     if (!session) return res.status(404).json({ error: 'Session not found' });
-    res.json({ ...session, qr: baileyService.qrCache.get(session.sessionId) || null });
+    res.json({
+      ...session,
+      qr: baileyService.qrCache.get(session.sessionId) || null,
+      pairingCode: baileyService.pairingCodeCache.get(session.sessionId) || null
+    });
   } catch (error) {
     logger.error(error);
     res.status(500).json({ error: 'Failed to fetch session' });
@@ -66,6 +71,40 @@ export const createSession = async (req, res) => {
   } catch (error) {
     logger.error(error);
     res.status(500).json({ error: 'Failed to create session' });
+  }
+};
+
+export const updateSession = async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  try {
+    const session = await prisma.session.update({
+      where: { id },
+      data: { name: name || undefined }
+    });
+    res.json(session);
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to update session' });
+  }
+};
+
+export const requestPairingCode = async (req, res) => {
+  const { id } = req.params;
+  const { phoneNumber } = req.body;
+  if (!phoneNumber) {
+    return res.status(400).json({ error: 'phoneNumber is required (e.g. 923001234567)' });
+  }
+
+  try {
+    const session = await prisma.session.findUnique({ where: { id } });
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+
+    const result = await baileyService.requestPairingCode(session.sessionId, phoneNumber);
+    res.json(result);
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: error.message || 'Failed to request pairing code' });
   }
 };
 

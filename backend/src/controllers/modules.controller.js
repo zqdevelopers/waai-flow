@@ -450,6 +450,42 @@ export const createBroadcast = async (req, res) => {
   }
 };
 
+const runningBroadcastTasks = new Map();
+
+export const updateBroadcast = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const broadcast = await prisma.broadcast.findUnique({ where: { id } });
+    if (!broadcast) return res.status(404).json({ error: 'Broadcast not found' });
+    if (broadcast.status === 'RUNNING') return res.status(400).json({ error: 'Cannot edit a running campaign' });
+
+    const recipients = req.body.recipients !== undefined
+      ? Array.isArray(req.body.recipients)
+        ? req.body.recipients
+        : String(req.body.recipients || '').split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean)
+      : parseJson(broadcast.recipients, []);
+
+    const updated = await prisma.broadcast.update({
+      where: { id },
+      data: {
+        name: req.body.name || broadcast.name,
+        sessionId: req.body.sessionId !== undefined ? req.body.sessionId || null : broadcast.sessionId,
+        recipients: stringify(recipients),
+        messageType: req.body.messageType || broadcast.messageType,
+        text: req.body.text !== undefined ? req.body.text : broadcast.text,
+        messageData: req.body.messageData ? JSON.stringify(req.body.messageData) : broadcast.messageData,
+        delayMs: req.body.delayMs !== undefined ? Number(req.body.delayMs) : broadcast.delayMs,
+        status: req.body.status || broadcast.status
+      }
+    });
+
+    res.json({ ...updated, recipients });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to update broadcast' });
+  }
+};
+
 export const runBroadcast = async (req, res) => {
   try {
     const broadcast = await prisma.broadcast.findUnique({ where: { id: req.params.id } });
@@ -462,10 +498,18 @@ export const runBroadcast = async (req, res) => {
     await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: 'RUNNING', result: '[]' } });
     res.json({ success: true, message: `Sending to ${recipients.length} recipients…` });
 
+    const cancelToken = { cancelled: false };
+    runningBroadcastTasks.set(broadcast.id, cancelToken);
+
     (async () => {
       const result = [];
       try {
         for (let i = 0; i < recipients.length; i++) {
+          if (cancelToken.cancelled) {
+            logger.info(`Broadcast ${broadcast.id} was cancelled by user.`);
+            break;
+          }
+
           const to = recipients[i];
           try {
             if (broadcast.sessionId) await baileyService.sendMessage(broadcast.sessionId, to, buildBroadcastPayload(broadcast));
@@ -473,22 +517,30 @@ export const runBroadcast = async (req, res) => {
           } catch (error) {
             result.push({ to, success: false, error: error.message });
           }
+
           await prisma.broadcast.update({
             where: { id: broadcast.id },
             data: { result: JSON.stringify(result) }
           }).catch(() => {});
-          if (delayMs > 0 && i < recipients.length - 1) {
+
+          if (delayMs > 0 && i < recipients.length - 1 && !cancelToken.cancelled) {
             await new Promise(r => setTimeout(r, delayMs));
           }
         }
+
+        const isCancelled = cancelToken.cancelled;
         const anyFailed = result.some((item) => !item.success);
+        const finalStatus = isCancelled ? 'CANCELLED' : (anyFailed ? 'PARTIAL' : 'COMPLETED');
+
         await prisma.broadcast.update({
           where: { id: broadcast.id },
-          data: { status: anyFailed ? 'PARTIAL' : 'COMPLETED', result: JSON.stringify(result) }
+          data: { status: finalStatus, result: JSON.stringify(result) }
         }).catch(() => {});
       } catch (error) {
         logger.error({ error, broadcastId: broadcast.id }, 'Broadcast loop failed');
         await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: 'FAILED' } }).catch(() => {});
+      } finally {
+        runningBroadcastTasks.delete(broadcast.id);
       }
     })();
   } catch (error) {
@@ -498,9 +550,32 @@ export const runBroadcast = async (req, res) => {
   }
 };
 
+export const cancelBroadcast = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const task = runningBroadcastTasks.get(id);
+    if (task) {
+      task.cancelled = true;
+      runningBroadcastTasks.delete(id);
+    }
+    await prisma.broadcast.update({
+      where: { id },
+      data: { status: 'CANCELLED' }
+    });
+    res.json({ success: true, message: 'Broadcast cancelled' });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to cancel broadcast' });
+  }
+};
+
 export const deleteBroadcast = async (req, res) => {
   try {
-    await prisma.broadcast.delete({ where: { id: req.params.id } });
+    const { id } = req.params;
+    const task = runningBroadcastTasks.get(id);
+    if (task) task.cancelled = true;
+    runningBroadcastTasks.delete(id);
+    await prisma.broadcast.delete({ where: { id } });
     res.json({ success: true });
   } catch (error) {
     logger.error(error);
@@ -530,13 +605,17 @@ export const getApiDocs = async (req, res) => {
     endpoints: [
       ['GET', '/status', 'Health check'],
       ['GET/POST/PUT/DELETE', '/flows', 'Manage automation flows'],
+      ['POST', '/flows/generate', 'Generate workflows from natural language with AI'],
       ['GET/POST/DELETE', '/session', 'Manage WhatsApp sessions'],
+      ['POST', '/session/:id/pairing-code', 'Generate WhatsApp pairing code (phone login)'],
       ['POST', '/webhook/:flowId', 'Trigger an active flow'],
       ['GET/POST/PUT/DELETE', '/modules/agents', 'Manage AI agents'],
       ['GET', '/modules/messages', 'List messages'],
       ['POST', '/modules/messages', 'Send or record a message'],
       ['POST', '/modules/messaging/send', 'Send any supported Baileys message type'],
-      ['GET/POST/DELETE', '/modules/broadcasts', 'Manage broadcasts'],
+      ['GET/POST/PUT/DELETE', '/modules/broadcasts', 'Manage broadcasts'],
+      ['POST', '/modules/broadcasts/:id/run', 'Run a broadcast campaign'],
+      ['POST', '/modules/broadcasts/:id/cancel', 'Cancel a running broadcast campaign'],
       ['GET/POST/DELETE', '/modules/scheduler', 'Schedule and cancel messages'],
       ['GET/PUT', '/modules/auto-replies', 'Manage keyword/regex auto replies'],
       ['GET', '/modules/deleted-messages', 'Inspect anti-delete recovered messages'],
@@ -559,7 +638,10 @@ export const getProviders = async (req, res) => {
       providers: [
         { id: 'openai', name: 'OpenAI', enabled: settings['provider.openai.enabled'] !== false, model: settings['provider.openai.model'] || 'gpt-4o', hasApiKey: Boolean(process.env.OPENAI_API_KEY) },
         { id: 'gemini', name: 'Gemini', enabled: settings['provider.gemini.enabled'] === true, model: settings['provider.gemini.model'] || 'gemini-2.0-flash', hasApiKey: Boolean(process.env.GEMINI_API_KEY) },
-        { id: 'ollama', name: 'Ollama', enabled: settings['provider.ollama.enabled'] === true, model: settings['provider.ollama.model'] || 'llama3', hasApiKey: true }
+        { id: 'anthropic', name: 'Anthropic Claude', enabled: settings['provider.anthropic.enabled'] === true, model: settings['provider.anthropic.model'] || 'claude-3-5-sonnet-20241022', hasApiKey: Boolean(process.env.ANTHROPIC_API_KEY) },
+        { id: 'deepseek', name: 'DeepSeek', enabled: settings['provider.deepseek.enabled'] === true, model: settings['provider.deepseek.model'] || 'deepseek-chat', hasApiKey: Boolean(process.env.DEEPSEEK_API_KEY) },
+        { id: 'groq', name: 'Groq', enabled: settings['provider.groq.enabled'] === true, model: settings['provider.groq.model'] || 'llama-3.3-70b-versatile', hasApiKey: Boolean(process.env.GROQ_API_KEY) },
+        { id: 'ollama', name: 'Ollama (Local)', enabled: settings['provider.ollama.enabled'] === true, model: settings['provider.ollama.model'] || 'llama3', hasApiKey: true }
       ]
     });
   } catch (error) {

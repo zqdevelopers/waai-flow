@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot, Play, MessageSquare, MessagesSquare, Megaphone, Webhook, Code2,
   Cpu, Puzzle, Folder, BarChart2, Settings, Globe, FileText, Plus, Trash2,
-  RefreshCw, Save, Send, Upload, Power, Copy, CheckCircle2, XCircle, ChevronRight
+  RefreshCw, Save, Send, Upload, Power, Copy, CheckCircle2, XCircle, ChevronRight,
+  Mic, Square, Check, FileSpreadsheet, Edit3, AlertTriangle, Clock
 } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { API_BASE_URL } from '../config';
+import { io } from 'socket.io-client';
+import { API_BASE_URL, SOCKET_URL } from '../config';
 import api from '../api';
 
 const formatDate = (value) => value ? new Date(value).toLocaleString() : '-';
@@ -42,7 +44,8 @@ const Button = ({ children, variant = 'primary', className = '', ...props }) => 
     primary: 'bg-primary hover:bg-primary-hover text-white shadow-primary/20',
     secondary: 'bg-background border border-border text-slate-300 hover:text-white hover:border-slate-600',
     danger: 'bg-danger-bg text-danger hover:bg-danger/20',
-    success: 'bg-success text-white hover:bg-emerald-600'
+    success: 'bg-success text-white hover:bg-emerald-600',
+    warning: 'bg-warning/20 text-warning hover:bg-warning/30'
   };
   return (
     <button {...props} className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${styles[variant]} ${className}`}>
@@ -73,7 +76,7 @@ const StatusPill = ({ status }) => {
     ? 'bg-success-bg text-success'
     : upper.includes('FAILED') || upper.includes('DISABLED')
       ? 'bg-danger-bg text-danger'
-      : upper === 'PARTIAL'
+      : upper === 'PARTIAL' || upper === 'CANCELLED'
         ? 'bg-amber-500/20 text-amber-400'
         : 'bg-warning/20 text-warning';
   return <span className={`inline-flex px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${cls}`}>{upper}</span>;
@@ -159,6 +162,9 @@ export const AgentsPage = () => {
               <Select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}>
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Gemini</option>
+                <option value="anthropic">Anthropic Claude</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="groq">Groq</option>
                 <option value="ollama">Ollama</option>
               </Select>
               <Input placeholder="Model" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
@@ -257,6 +263,9 @@ export const ConversationsPage = () => {
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState({ sessionId: '', text: '' });
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const messagesEndRef = useRef(null);
 
   const open = async (conversation) => {
     setSelected(conversation);
@@ -264,43 +273,166 @@ export const ConversationsPage = () => {
     setMessages(res.data.reverse());
   };
 
+  useEffect(() => {
+    const socket = io(SOCKET_URL, {
+      auth: { token: localStorage.getItem('waai.auth.token') }
+    });
+
+    socket.on('message:new', (newMsg) => {
+      if (selected && newMsg.remoteJid === selected.remoteJid) {
+        setMessages(prev => [...prev, newMsg]);
+      }
+      load();
+    });
+
+    socket.on('chat:update', () => {
+      load();
+    });
+
+    return () => {
+      socket.off('message:new');
+      socket.off('chat:update');
+      socket.disconnect();
+    };
+  }, [selected, load]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   const sendReply = async () => {
-    if (!selected || !reply.text) return;
-    await api.post('/modules/messages', { sessionId: reply.sessionId || undefined, to: selected.remoteJid, text: reply.text });
-    setReply({ ...reply, text: '' });
-    open(selected);
-    load();
+    if (!selected || !reply.text.trim()) return;
+    const textToSend = reply.text.trim();
+    setReply(prev => ({ ...prev, text: '' }));
+    try {
+      await api.post('/modules/messages', {
+        sessionId: reply.sessionId || undefined,
+        to: selected.remoteJid,
+        text: textToSend
+      });
+      open(selected);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to send message');
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/mp3' });
+        const file = new File([blob], `voice_${Date.now()}.mp3`, { type: 'audio/mp3' });
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const uploadRes = await api.post('/modules/files', formData);
+          if (uploadRes.data?.path && reply.sessionId && selected) {
+            await api.post('/modules/messaging/send', {
+              sessionId: reply.sessionId,
+              to: selected.remoteJid,
+              type: 'audio',
+              ptt: true,
+              media: { path: uploadRes.data.path }
+            });
+            open(selected);
+          }
+        } catch (err) {
+          alert('Failed to send voice note');
+        }
+      };
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+    } catch (err) {
+      alert('Microphone permission required for voice notes');
+    }
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+    }
   };
 
   return (
-    <Page title="Conversations" description="Group messages by WhatsApp contact and reply from a connected session." icon={MessageSquare}>
+    <Page title="Conversations" description="Live real-time WhatsApp inbox with instant messaging and voice notes." icon={MessageSquare}>
       <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-5">
         <Panel title="Contacts">
-          {conversations.length === 0 ? <Empty /> : conversations.map((item) => (
-            <button key={item.remoteJid} onClick={() => open(item)} className={`w-full text-left p-3 rounded-lg border mb-2 ${selected?.remoteJid === item.remoteJid ? 'border-primary bg-primary/10' : 'border-border bg-background hover:border-slate-600'}`}>
-              <div className="text-white text-sm font-medium">{item.remoteJid}</div>
-              <div className="text-xs text-slate-400 truncate mt-1">{item.lastText || 'No text'}</div>
-              <div className="text-[10px] text-slate-500 mt-2">{item.messageCount} messages</div>
-            </button>
-          ))}
-        </Panel>
-        <Panel title={selected ? selected.remoteJid : 'Conversation'}>
-          {!selected ? <Empty text="Select a contact to view the conversation." /> : (
-            <div className="space-y-4">
-              <div className="h-[420px] overflow-y-auto bg-background border border-border rounded-lg p-4 space-y-3">
-                {messages.map((message) => (
-                  <div key={message.id} className="max-w-[80%] bg-surface border border-border rounded-lg p-3">
-                    <div className="text-sm text-slate-200">{message.text || '(empty message)'}</div>
-                    <div className="text-[10px] text-slate-500 mt-2">{formatDate(message.createdAt)}</div>
+          {conversations.length === 0 ? <Empty text="No conversations yet." /> : (
+            <div className="space-y-2 max-h-[550px] overflow-y-auto custom-scrollbar pr-1">
+              {conversations.map((item) => (
+                <button
+                  key={item.remoteJid}
+                  onClick={() => open(item)}
+                  className={`w-full text-left p-3 rounded-xl border transition ${selected?.remoteJid === item.remoteJid ? 'border-primary bg-primary/15 text-white' : 'border-border bg-background hover:border-slate-600 text-slate-300'}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-sm truncate">{item.remoteJid}</span>
+                    <span className="text-[10px] text-slate-500">{item.lastMessageAt ? new Date(item.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   </div>
-                ))}
+                  <div className="text-xs text-slate-400 truncate mt-1">{item.lastText || 'Media message'}</div>
+                  <div className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1">
+                    <span className="bg-surface px-1.5 py-0.5 rounded border border-border">{item.messageCount} msgs</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Panel>
+        <Panel title={selected ? `Chat with ${selected.remoteJid}` : 'Conversation'}>
+          {!selected ? <Empty text="Select a contact from the left to view the live conversation." /> : (
+            <div className="space-y-4 flex flex-col h-[550px]">
+              <div className="flex-1 overflow-y-auto bg-background border border-border rounded-xl p-4 space-y-3 custom-scrollbar">
+                {messages.map((message) => {
+                  const isOut = message.sender && !message.sender.includes('@s.whatsapp.net');
+                  return (
+                    <div key={message.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[75%] rounded-2xl p-3.5 shadow ${isOut ? 'bg-[#1a3a25] text-white rounded-tr-none border border-emerald-800/40' : 'bg-surface text-slate-200 rounded-tl-none border border-border'}`}>
+                        <div className="text-sm whitespace-pre-wrap leading-relaxed">{message.text || '(media message)'}</div>
+                        <div className="flex items-center justify-end gap-1.5 text-[10px] text-slate-400 mt-1.5">
+                          <span>{formatDate(message.createdAt)}</span>
+                          {isOut && <Check size={11} className="text-primary" />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-[220px_1fr_auto] gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto_auto] gap-2 items-center shrink-0">
                 <Select value={reply.sessionId} onChange={(e) => setReply({ ...reply, sessionId: e.target.value })}>
                   <option value="">Record only</option>
-                  {sessions.map((session) => <option key={session.id} value={session.sessionId}>{session.name}</option>)}
+                  {sessions.map((session) => <option key={session.id} value={session.sessionId}>{session.name} ({session.status})</option>)}
                 </Select>
-                <Input placeholder="Reply text" value={reply.text} onChange={(e) => setReply({ ...reply, text: e.target.value })} />
+                <Input
+                  placeholder="Type a WhatsApp reply..."
+                  value={reply.text}
+                  onChange={(e) => setReply({ ...reply, text: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Enter' && sendReply()}
+                />
+                {!isRecording ? (
+                  <button
+                    onClick={startVoiceRecording}
+                    className="p-2.5 bg-surface border border-border hover:border-primary text-slate-300 hover:text-white rounded-lg transition"
+                    title="Record Voice Note"
+                  >
+                    <Mic size={16} />
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopVoiceRecording}
+                    className="p-2.5 bg-danger text-white rounded-lg animate-pulse"
+                    title="Stop and Send Voice Note"
+                  >
+                    <Square size={16} />
+                  </button>
+                )}
                 <Button onClick={sendReply}><Send size={16} /> Send</Button>
               </div>
             </div>
@@ -312,17 +444,32 @@ export const ConversationsPage = () => {
 };
 
 export const MessagesPage = () => {
-  const { data: messages, load } = useResource('/modules/messages');
+  const { data: messages, load, setData } = useResource('/modules/messages');
   const sessions = useSessions();
   const [form, setForm] = useState({ sessionId: '', to: '', type: 'text', text: '', payload: '{}' });
   const [schedule, setSchedule] = useState({ delayMs: '', scheduledTime: '' });
   const [autoReplyRules, setAutoReplyRules] = useState('[]');
   const [utility, setUtility] = useState({ action: 'search', value: '', result: '' });
+
   useEffect(() => {
     api.get('/modules/auto-replies')
       .then((res) => setAutoReplyRules(JSON.stringify(res.data, null, 2)))
       .catch(() => setAutoReplyRules('[]'));
-  }, []);
+
+    const socket = io(SOCKET_URL, {
+      auth: { token: localStorage.getItem('waai.auth.token') }
+    });
+
+    socket.on('message:new', (newMsg) => {
+      setData(prev => [newMsg, ...prev]);
+    });
+
+    return () => {
+      socket.off('message:new');
+      socket.disconnect();
+    };
+  }, [setData]);
+
   const parsePayload = () => {
     try {
       return form.payload ? JSON.parse(form.payload) : {};
@@ -331,6 +478,7 @@ export const MessagesPage = () => {
       return null;
     }
   };
+
   const send = async () => {
     const payload = parsePayload();
     if (!payload) return;
@@ -338,6 +486,7 @@ export const MessagesPage = () => {
     setForm({ ...form, text: '' });
     load();
   };
+
   const scheduleMessage = async () => {
     const payload = parsePayload();
     if (!payload) return;
@@ -349,6 +498,7 @@ export const MessagesPage = () => {
     });
     setSchedule({ delayMs: '', scheduledTime: '' });
   };
+
   const saveAutoReplies = async () => {
     try {
       await api.put('/modules/auto-replies', { rules: JSON.parse(autoReplyRules) });
@@ -357,6 +507,7 @@ export const MessagesPage = () => {
       alert('Auto-reply JSON is invalid');
     }
   };
+
   const runUtility = async () => {
     const action = utility.action;
     let res;
@@ -370,6 +521,7 @@ export const MessagesPage = () => {
     if (action === 'privacy') res = await api.post('/modules/privacy', { sessionId: form.sessionId, action: 'settings' });
     setUtility({ ...utility, result: JSON.stringify(res?.data, null, 2) });
   };
+
   return (
     <Page title="Messages" description="Send all supported Baileys message types and manage messaging automation." icon={MessagesSquare}>
       <Panel title="Send Message" className="mb-5">
@@ -451,11 +603,13 @@ export const BroadcastPage = () => {
     listItem1: '', listItem2: '', listItem3: '', listItem4: '', listItem5: '',
   };
   const [form, setForm] = useState(BLANK);
+  const [editId, setEditId] = useState(null);
   const [tab, setTab] = useState('compose');
   const [creating, setCreating] = useState(false);
   const [runningId, setRunningId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [error, setError] = useState('');
+  const csvFileRef = useRef(null);
 
   const parsedRecipients = useMemo(() =>
     form.recipients.split(/\n|,/).map(r => r.trim()).filter(Boolean),
@@ -466,11 +620,11 @@ export const BroadcastPage = () => {
       if (broadcasts.some(b => b.status === 'RUNNING')) load();
     }, 3000);
     return () => clearInterval(t);
-  }, [broadcasts.length]);
+  }, [broadcasts.length, load]);
 
   useEffect(() => {
     if (selected) setSelected(broadcasts.find(b => b.id === selected.id) || null);
-  }, [broadcasts]);
+  }, [broadcasts, selected]);
 
   const buildMessageData = () => {
     switch (form.messageType) {
@@ -500,23 +654,15 @@ export const BroadcastPage = () => {
     }
   };
 
-  const create = async () => {
+  const createOrUpdate = async () => {
     if (!form.name.trim()) { setError('Campaign name is required'); return; }
     if (!parsedRecipients.length) { setError('Add at least one recipient'); return; }
     if (!form.text.trim()) { setError('Message text is required'); return; }
-    if (['image', 'video', 'document'].includes(form.messageType) && !form.mediaUrl.trim()) {
-      setError('Media URL is required for this message type'); return;
-    }
-    if (form.messageType === 'buttons' && !form.btn1.trim()) {
-      setError('At least one button label is required'); return;
-    }
-    if (form.messageType === 'list' && !form.listItem1.trim()) {
-      setError('At least one list item is required'); return;
-    }
+
     setCreating(true); setError('');
     try {
       const messageData = buildMessageData();
-      await api.post('/modules/broadcasts', {
+      const payload = {
         name: form.name,
         sessionId: form.sessionId,
         recipients: parsedRecipients,
@@ -524,10 +670,85 @@ export const BroadcastPage = () => {
         delayMs: parseInt(form.delayMs) || 2000,
         messageType: form.messageType,
         messageData,
-      });
-      setForm(BLANK); setTab('compose'); load();
-    } catch (err) { setError(err.response?.data?.error || 'Failed to create'); }
-    finally { setCreating(false); }
+      };
+
+      if (editId) {
+        await api.put(`/modules/broadcasts/${editId}`, payload);
+        setEditId(null);
+      } else {
+        await api.post('/modules/broadcasts', payload);
+      }
+
+      setForm(BLANK);
+      setTab('compose');
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to save campaign');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleEditDraft = (b) => {
+    setEditId(b.id);
+    setForm({
+      name: b.name,
+      sessionId: b.sessionId || '',
+      recipients: (b.recipients || []).join('\n'),
+      text: b.text || '',
+      delayMs: String(b.delayMs || 2000),
+      messageType: b.messageType || 'text',
+      mediaUrl: b.messageData?.url || '',
+      fileName: b.messageData?.fileName || 'document',
+      footer: b.messageData?.footer || '',
+      btn1: b.messageData?.buttons?.[0]?.displayText || '',
+      btn2: b.messageData?.buttons?.[1]?.displayText || '',
+      btn3: b.messageData?.buttons?.[2]?.displayText || '',
+      listButtonText: b.messageData?.buttonText || 'View Options',
+      listItem1: b.messageData?.sections?.[0]?.rows?.[0]?.title || '',
+      listItem2: b.messageData?.sections?.[0]?.rows?.[1]?.title || '',
+      listItem3: b.messageData?.sections?.[0]?.rows?.[2]?.title || '',
+      listItem4: b.messageData?.sections?.[0]?.rows?.[3]?.title || '',
+      listItem5: b.messageData?.sections?.[0]?.rows?.[4]?.title || '',
+    });
+    setTab('compose');
+  };
+
+  const cancelCampaign = async (broadcast, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Cancel running campaign "${broadcast.name}"?`)) return;
+    try {
+      await api.post(`/modules/broadcasts/${broadcast.id}/cancel`);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to cancel broadcast');
+    }
+  };
+
+  const handleCsvUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target.result;
+      const lines = text.split(/\r?\n/);
+      const numbers = [];
+      for (const line of lines) {
+        const parts = line.split(',');
+        const num = parts[0]?.trim();
+        if (num && num.match(/\d+/)) {
+          const jid = num.includes('@') ? num : `${num.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+          numbers.push(jid);
+        }
+      }
+      if (numbers.length) {
+        setForm(prev => ({
+          ...prev,
+          recipients: prev.recipients ? `${prev.recipients}\n${numbers.join('\n')}` : numbers.join('\n')
+        }));
+      }
+    };
+    reader.readAsText(file);
   };
 
   const run = async (broadcast) => {
@@ -555,12 +776,12 @@ export const BroadcastPage = () => {
   const typeIcon = MSG_TYPES.find(t => t.id === form.messageType)?.icon || '💬';
 
   return (
-    <Page title="Broadcast" description="Send bulk WhatsApp messages to multiple contacts at once." icon={Megaphone}
+    <Page title="Broadcast" description="Send bulk WhatsApp messages with pause/cancel controls and CSV contact import." icon={Megaphone}
       actions={<Button variant="secondary" onClick={load}><RefreshCw size={16} /> Refresh</Button>}>
       <div className="grid grid-cols-1 xl:grid-cols-[480px_1fr] gap-6">
 
         <div className="space-y-5">
-          <Panel>
+          <Panel title={editId ? 'Edit Campaign Draft' : 'New Campaign'}>
             <div className="flex gap-1 bg-background rounded-lg p-1 mb-5">
               <TabBtn id="compose" label="✏️ Compose" active={tab === 'compose'} onClick={() => setTab('compose')} />
               <TabBtn id="preview" label="👁️ Preview" active={tab === 'preview'} onClick={() => setTab('preview')} />
@@ -609,14 +830,23 @@ export const BroadcastPage = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recipients</label>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${parsedRecipients.length > 0 ? 'bg-success/15 text-success' : 'bg-slate-800 text-slate-500'}`}>
-                      {parsedRecipients.length} contacts
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => csvFileRef.current?.click()}
+                        className="text-[11px] text-primary hover:text-white flex items-center gap-1 bg-surface px-2 py-0.5 rounded border border-border"
+                      >
+                        <FileSpreadsheet size={12} /> Import CSV
+                      </button>
+                      <input ref={csvFileRef} type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${parsedRecipients.length > 0 ? 'bg-success/15 text-success' : 'bg-slate-800 text-slate-500'}`}>
+                        {parsedRecipients.length} contacts
+                      </span>
+                    </div>
                   </div>
                   <Textarea rows={5} value={form.recipients}
                     onChange={e => setForm({ ...form, recipients: e.target.value })}
                     placeholder={'One per line or comma-separated:\n923001234567@s.whatsapp.net\n923009876543@s.whatsapp.net'} />
-                  <p className="text-[11px] text-slate-600 mt-1">Use <code className="text-slate-500">number@s.whatsapp.net</code> format</p>
                 </div>
 
                 <div>
@@ -628,7 +858,7 @@ export const BroadcastPage = () => {
                   </div>
                   <Textarea rows={4} value={form.text}
                     onChange={e => setForm({ ...form, text: e.target.value })}
-                    placeholder="Hello! This is a message from our team..." />
+                    placeholder="Hello! This is a special announcement from our team..." />
                 </div>
 
                 {['image', 'video', 'document'].includes(form.messageType) && (
@@ -636,54 +866,6 @@ export const BroadcastPage = () => {
                     <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Media URL</label>
                     <Input placeholder="https://example.com/file.jpg" value={form.mediaUrl}
                       onChange={e => setForm({ ...form, mediaUrl: e.target.value })} />
-                    {form.messageType === 'document' && (
-                      <div className="mt-2">
-                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">File Name</label>
-                        <Input placeholder="document.pdf" value={form.fileName}
-                          onChange={e => setForm({ ...form, fileName: e.target.value })} />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {form.messageType === 'buttons' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Button Labels (up to 3)</label>
-                    <div className="space-y-2">
-                      {[['btn1', 'Button 1 (required)'], ['btn2', 'Button 2'], ['btn3', 'Button 3']].map(([key, ph]) => (
-                        <Input key={key} placeholder={ph} value={form[key]}
-                          onChange={e => setForm({ ...form, [key]: e.target.value })} />
-                      ))}
-                    </div>
-                    <div className="mt-2">
-                      <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Footer (optional)</label>
-                      <Input placeholder="e.g. Powered by WAAI" value={form.footer}
-                        onChange={e => setForm({ ...form, footer: e.target.value })} />
-                    </div>
-                  </div>
-                )}
-
-                {form.messageType === 'list' && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">List Items (up to 5)</label>
-                    <div className="space-y-2">
-                      {[['listItem1', 'Item 1 (required)'], ['listItem2', 'Item 2'], ['listItem3', 'Item 3'], ['listItem4', 'Item 4'], ['listItem5', 'Item 5']].map(([key, ph]) => (
-                        <Input key={key} placeholder={ph} value={form[key]}
-                          onChange={e => setForm({ ...form, [key]: e.target.value })} />
-                      ))}
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Button Text</label>
-                        <Input placeholder="View Options" value={form.listButtonText}
-                          onChange={e => setForm({ ...form, listButtonText: e.target.value })} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Footer (optional)</label>
-                        <Input placeholder="Powered by WAAI" value={form.footer}
-                          onChange={e => setForm({ ...form, footer: e.target.value })} />
-                      </div>
-                    </div>
                   </div>
                 )}
 
@@ -695,14 +877,18 @@ export const BroadcastPage = () => {
                   <input type="range" min="500" max="10000" step="500" value={form.delayMs}
                     onChange={e => setForm({ ...form, delayMs: e.target.value })}
                     className="w-full accent-primary" />
-                  <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
-                    <span>0.5s (fast)</span><span>5s (recommended)</span><span>10s (safe)</span>
-                  </div>
                 </div>
 
-                <Button onClick={create} disabled={creating} className="w-full justify-center py-2.5">
-                  {creating ? <><RefreshCw size={15} className="animate-spin" /> Creating…</> : <><Plus size={15} /> Create Campaign</>}
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={createOrUpdate} disabled={creating} className="flex-1 justify-center py-2.5">
+                    {creating ? <><RefreshCw size={15} className="animate-spin" /> Saving…</> : editId ? <><Save size={15} /> Update Campaign</> : <><Plus size={15} /> Create Campaign</>}
+                  </Button>
+                  {editId && (
+                    <Button variant="secondary" onClick={() => { setEditId(null); setForm(BLANK); }}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -716,57 +902,15 @@ export const BroadcastPage = () => {
                       </div>
                       <div>
                         <div className="text-white text-sm font-semibold">{form.name || 'Campaign Name'}</div>
-                        <div className="text-[10px] text-slate-500">WhatsApp Business</div>
+                        <div className="text-[10px] text-slate-500">WhatsApp Broadcast</div>
                       </div>
                     </div>
                     <div className="bg-[#1a3a25] rounded-xl rounded-tl-none p-3 text-sm text-slate-200 leading-relaxed">
-                      {['image', 'video', 'document'].includes(form.messageType) && (
-                        <div className="bg-black/30 rounded-lg p-3 flex items-center gap-2 mb-2 text-xs text-slate-400">
-                          <span className="text-2xl">{typeIcon}</span>
-                          <div>
-                            <div className="text-slate-300 font-medium">{form.messageType === 'document' ? (form.fileName || 'document') : form.messageType}</div>
-                            {form.mediaUrl ? <div className="truncate max-w-[180px] text-slate-600">{form.mediaUrl}</div> : <div className="text-slate-600 italic">No URL set</div>}
-                          </div>
-                        </div>
-                      )}
                       <div className="whitespace-pre-wrap min-h-[40px]">
-                        {form.text || <span className="text-slate-600 italic">No message yet…</span>}
+                        {form.text || <span className="text-slate-600 italic">No message preview…</span>}
                       </div>
-                      {form.messageType === 'buttons' && (
-                        <div className="mt-2 space-y-1">
-                          {[form.btn1, form.btn2, form.btn3].filter(Boolean).map((b, i) => (
-                            <div key={i} className="border border-[#2a5040] rounded-lg py-1.5 text-center text-xs text-primary font-medium">{b}</div>
-                          ))}
-                          {form.footer && <div className="text-[10px] text-slate-600 text-center mt-1">{form.footer}</div>}
-                        </div>
-                      )}
-                      {form.messageType === 'list' && (
-                        <div className="mt-2">
-                          <div className="border border-[#2a5040] rounded-lg py-1.5 text-center text-xs text-primary font-medium">
-                            {form.listButtonText || 'View Options'} ▾
-                          </div>
-                          {form.footer && <div className="text-[10px] text-slate-600 text-center mt-1">{form.footer}</div>}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-slate-600 text-right mt-1.5">
-                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ✓✓
                     </div>
                   </div>
-                </div>
-                <div className="bg-background border border-border rounded-xl p-4 space-y-3 text-sm">
-                  {[
-                    ['👥 Recipients', parsedRecipients.length, parsedRecipients.length > 0 ? 'text-white' : 'text-slate-500'],
-                    ['📨 Type', MSG_TYPES.find(t => t.id === form.messageType)?.label || 'Text', 'text-white'],
-                    ['📱 Session', form.sessionId ? (sessions.find(s => s.sessionId === form.sessionId)?.name || form.sessionId) : 'Dry run', form.sessionId ? 'text-success' : 'text-amber-400'],
-                    ['⏱ Delay', `${(parseInt(form.delayMs) / 1000).toFixed(1)}s per message`, 'text-white'],
-                    ['🕐 Est. duration', parsedRecipients.length > 0 ? `~${Math.ceil(parsedRecipients.length * parseInt(form.delayMs) / 1000)}s` : '—', 'text-slate-400'],
-                  ].map(([l, v, c]) => (
-                    <div key={l} className="flex justify-between">
-                      <span className="text-slate-500">{l}</span>
-                      <span className={`font-medium ${c}`}>{String(v)}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -790,15 +934,15 @@ export const BroadcastPage = () => {
                           <div className="min-w-0">
                             <h3 className="text-white font-semibold truncate">{item.name}</h3>
                             <p className="text-xs text-slate-500 truncate mt-0.5 max-w-[280px]">
-                              {MSG_TYPES.find(t => t.id === (item.messageType || 'text'))?.icon || '💬'} {item.text || '—'}
+                              {item.text || '—'}
                             </p>
                           </div>
                           <StatusPill status={item.status} />
                         </div>
 
                         <div className="flex items-center gap-4 mt-2.5 text-xs text-slate-500 flex-wrap">
-                          <span>👥 {item.recipients.length}</span>
-                          <span>⏱ {((item.delayMs || 2000) / 1000).toFixed(1)}s</span>
+                          <span>👥 {item.recipients.length} contacts</span>
+                          <span>⏱ {((item.delayMs || 2000) / 1000).toFixed(1)}s delay</span>
                           {s.total > 0 && <>
                             <span className="text-success font-medium">✓ {s.ok} sent</span>
                             {s.fail > 0 && <span className="text-danger font-medium">✗ {s.fail} failed</span>}
@@ -823,14 +967,19 @@ export const BroadcastPage = () => {
 
                         <div className="flex gap-2 mt-3" onClick={e => e.stopPropagation()}>
                           {!isRunning ? (
-                            <Button variant="success" onClick={() => run(item)} disabled={runningId === item.id} className="text-xs py-1.5">
-                              {runningId === item.id ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
-                              {item.status === 'DRAFT' ? 'Send Now' : 'Re-run'}
-                            </Button>
+                            <>
+                              <Button variant="success" onClick={() => run(item)} disabled={runningId === item.id} className="text-xs py-1.5">
+                                {runningId === item.id ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
+                                {item.status === 'DRAFT' ? 'Send Now' : 'Re-run'}
+                              </Button>
+                              <Button variant="secondary" onClick={() => handleEditDraft(item)} className="text-xs py-1.5">
+                                <Edit3 size={12} /> Edit
+                              </Button>
+                            </>
                           ) : (
-                            <span className="flex items-center gap-1 text-xs text-amber-400">
-                              <RefreshCw size={11} className="animate-spin" /> Running…
-                            </span>
+                            <Button variant="danger" onClick={(e) => cancelCampaign(item, e)} className="text-xs py-1.5">
+                              <Square size={12} /> Stop / Cancel
+                            </Button>
                           )}
                           <Button variant="danger" onClick={() => remove(item)} className="text-xs py-1.5">
                             <Trash2 size={12} /> Delete
@@ -872,16 +1021,6 @@ export const BroadcastPage = () => {
                             ))}
                           </div>
                         </div>
-                      )}
-                      {ok.length > 0 && (
-                        <details className="group">
-                          <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 list-none flex items-center gap-1">
-                            <ChevronRight size={11} className="group-open:rotate-90 transition" /> {ok.length} delivered recipients
-                          </summary>
-                          <div className="mt-2 max-h-40 overflow-y-auto space-y-0.5">
-                            {ok.map((r, i) => <div key={i} className="text-xs text-slate-600 font-mono py-0.5">{r.to}</div>)}
-                          </div>
-                        </details>
                       )}
                     </div>
                 }
@@ -1007,214 +1146,31 @@ export const WebhooksPage = () => {
               </div>
             </div>
           </Panel>
-
-          <Panel title="Security">
-            <div className="space-y-3 text-sm text-slate-400">
-              <div className="flex gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg">
-                <span className="text-warning text-lg">⚠</span>
-                <p>Webhook URLs are <strong className="text-white">public by path</strong>. Anyone who knows the URL can trigger the flow.</p>
-              </div>
-              <ul className="space-y-2 list-disc list-inside text-slate-400">
-                <li>Keep flow IDs out of public repos</li>
-                <li>Add a secret field in payload and check with a <strong className="text-white">Condition</strong> node</li>
-                <li>Disable flows you are not actively using</li>
-                <li>Rate limiting: 300 requests/min per IP applies globally</li>
-              </ul>
-              <CodeBlock lang="flow tip" code={`// Condition node to verify secret:\nvariable: webhookPayload.secret\noperator: equals\nvalue:    my_secret_token`} />
-            </div>
-          </Panel>
-
-          <Panel title="Webhook Format">
-            <CodeBlock lang="http" code={`POST /api/webhook/:flowId\nContent-Type: application/json\n\n{\n  "sender": "923001234567@s.whatsapp.net",\n  "message": "Hello",\n  "customField": "anything"\n}`} />
-            <p className="text-xs text-slate-500 mt-3">Response: <code className="text-success">{'200 { "success": true }'}</code></p>
-          </Panel>
         </div>
       </div>
     </Page>
   );
 };
 
-const METHOD_COLOR = { GET: 'text-emerald-400', POST: 'text-blue-400', PUT: 'text-amber-400', PATCH: 'text-orange-400', DELETE: 'text-red-400' };
-const API_CATEGORIES = [
-  {
-    title: 'Authentication',
-    endpoints: [
-      { method: 'POST', route: '/api/auth/login', description: 'Login with username + password → returns JWT token', request: '{ "username": "admin", "password": "changeme" }', response: '{ "token": "eyJ..." }' },
-      { method: 'GET',  route: '/api/auth/me',    description: 'Get current authenticated user info', response: '{ "username": "admin" }' },
-    ]
-  },
-  {
-    title: 'Flows',
-    endpoints: [
-      { method: 'GET',    route: '/api/flows',              description: 'List all flows' },
-      { method: 'POST',   route: '/api/flows',              description: 'Create a new flow', request: '{ "name": "My Flow", "nodes": "[]", "edges": "[]", "isActive": true, "sessionId": null }' },
-      { method: 'GET',    route: '/api/flows/:id',          description: 'Get flow by ID' },
-      { method: 'PUT',    route: '/api/flows/:id',          description: 'Update a flow' },
-      { method: 'DELETE', route: '/api/flows/:id',          description: 'Delete a flow' },
-      { method: 'POST',   route: '/api/flows/run/:id',      description: 'Test-run a flow with custom variables', request: '{ "variables": { "sender": "...", "message": "hi" } }', response: '{ "success": true }' },
-      { method: 'POST',   route: '/api/webhook/:flowId',    description: 'Trigger flow externally (no auth required)', request: '{ "sender": "...", "message": "..." }' },
-    ]
-  },
-  {
-    title: 'Sessions',
-    endpoints: [
-      { method: 'GET',    route: '/api/session',                  description: 'List all WhatsApp sessions' },
-      { method: 'GET',    route: '/api/session/:id',              description: 'Get a single session by ID' },
-      { method: 'POST',   route: '/api/session/create',           description: 'Create and connect a new session', request: '{ "name": "My Phone", "sessionId": "my-phone" }' },
-      { method: 'POST',   route: '/api/session/:id/reconnect',    description: 'Reconnect a disconnected session', response: '{ "success": true, "status": "CONNECTING" }' },
-      { method: 'DELETE', route: '/api/session/:id',              description: 'Delete and disconnect a session' },
-      { method: 'POST',   route: '/api/session/send',             description: 'Send a message via a session', request: '{ "sessionId": "my-phone", "to": "923...@s.whatsapp.net", "text": "Hello" }' },
-    ]
-  },
-  {
-    title: 'Messages & Broadcast',
-    endpoints: [
-      { method: 'POST',   route: '/api/modules/messages',   description: 'Send a WhatsApp message', request: '{ "sessionId": "...", "to": "923...@s.whatsapp.net", "type": "text", "text": "Hello!" }' },
-      { method: 'GET',    route: '/api/modules/messages',   description: 'List stored messages' },
-      { method: 'GET',    route: '/api/modules/conversations', description: 'List grouped conversations' },
-      { method: 'POST',   route: '/api/modules/broadcasts', description: 'Create broadcast campaign' },
-      { method: 'POST',   route: '/api/modules/broadcasts/:id/run', description: 'Execute a broadcast campaign' },
-    ]
-  },
-  {
-    title: 'AI & Agents',
-    endpoints: [
-      { method: 'GET',    route: '/api/modules/agents',     description: 'List AI agents' },
-      { method: 'POST',   route: '/api/modules/agents',     description: 'Create AI agent', request: '{ "name": "Support Bot", "provider": "openai", "model": "gpt-4o", "systemPrompt": "..." }' },
-      { method: 'GET',    route: '/api/modules/providers',  description: 'List configured AI providers' },
-      { method: 'PUT',    route: '/api/modules/providers/:id', description: 'Update provider config / API key' },
-    ]
-  },
-  {
-    title: 'Executions & Analytics',
-    endpoints: [
-      { method: 'GET',    route: '/api/modules/executions', description: 'List recent flow executions with logs' },
-      { method: 'GET',    route: '/api/modules/analytics',  description: 'Totals and messages-per-day chart data' },
-    ]
-  },
-];
-
 export const ApiPage = () => {
   const { data } = useResource('/modules/api-docs', { endpoints: [] });
   const baseUrl = data.baseUrl || (window.location.origin + '/api');
-  const [openSections, setOpenSections] = useState({ Authentication: true, Flows: true });
-  const toggleSection = (title) => setOpenSections(p => ({ ...p, [title]: !p[title] }));
-
-  const curlExample = (ep) => {
-    const url = `${baseUrl.replace(/\/api$/, '')}${ep.route}`;
-    const auth = `-H "Authorization: Bearer $TOKEN" \\`;
-    const body = ep.request ? `\n  -H "Content-Type: application/json" \\\n  -d '${ep.request}'` : '';
-    return `curl -X ${ep.method} "${url}" \\\n  ${auth}${body}`;
-  };
-
-  const jsExample = (ep) => {
-    const url = `${baseUrl.replace(/\/api$/, '')}${ep.route}`;
-    const body = ep.request ? `,\n  body: JSON.stringify(${ep.request})` : '';
-    return `const res = await fetch("${url}", {\n  method: "${ep.method}",\n  headers: {\n    "Authorization": "Bearer " + token,\n    "Content-Type": "application/json"\n  }${body}\n});\nconst data = await res.json();`;
-  };
-
-  const pyExample = (ep) => {
-    const url = `${baseUrl.replace(/\/api$/, '')}${ep.route}`;
-    const body = ep.request ? `, json=${ep.request}` : '';
-    return `import requests\nheaders = {"Authorization": f"Bearer {token}"}\nres = requests.${ep.method.toLowerCase()}("${url}", headers=headers${body})\nprint(res.json())`;
-  };
 
   return (
     <Page title="REST API" description="Complete reference for all endpoints exposed by this WAAI Flow instance." icon={Code2}>
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-5">
-        <div className="space-y-5">
-          <Panel title="Authentication">
-            <div className="space-y-4 text-sm text-slate-400">
-              <p>All endpoints except <code className="text-primary">/api/auth/login</code> and <code className="text-primary">/api/webhook/:flowId</code> require a Bearer token.</p>
-              <CodeBlock lang="step 1 — login" code={`curl -X POST "${baseUrl}/auth/login" \\\n  -H "Content-Type: application/json" \\\n  -d '{ "username": "admin", "password": "changeme" }'\n# → { "token": "eyJ..." }`} />
-              <CodeBlock lang="step 2 — use token" code={`export TOKEN="eyJ..."\ncurl "${baseUrl}/flows" \\\n  -H "Authorization: Bearer $TOKEN"`} />
+      <Panel title="API Endpoints">
+        <div className="space-y-3">
+          {(data.endpoints || []).map(([method, route, desc], idx) => (
+            <div key={idx} className="bg-background border border-border p-3 rounded-lg flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="bg-primary/20 text-primary px-2 py-0.5 rounded font-bold">{method}</span>
+                <code className="text-white font-mono">{route}</code>
+              </div>
+              <span className="text-slate-400">{desc}</span>
             </div>
-          </Panel>
-
-          {API_CATEGORIES.map((cat) => (
-            <Panel key={cat.title}>
-              <button onClick={() => toggleSection(cat.title)} className="w-full flex items-center justify-between gap-2 mb-1 group">
-                <h2 className="text-base font-semibold text-white">{cat.title}</h2>
-                <ChevronRight size={15} className={`text-slate-500 transition ${openSections[cat.title] ? 'rotate-90' : ''}`} />
-              </button>
-              {openSections[cat.title] && (
-                <div className="space-y-3 mt-4">
-                  {cat.endpoints.map((ep, i) => (
-                    <details key={i} className="group bg-background border border-border rounded-xl overflow-hidden">
-                      <summary className="grid grid-cols-[70px_1fr] md:grid-cols-[70px_1fr_2fr] gap-3 items-center p-3 cursor-pointer list-none hover:bg-surface/40 transition">
-                        <span className={`text-xs font-bold ${METHOD_COLOR[ep.method] || 'text-slate-400'}`}>{ep.method}</span>
-                        <code className="text-slate-200 text-xs">{ep.route}</code>
-                        <span className="text-slate-500 text-sm hidden md:block">{ep.description}</span>
-                      </summary>
-                      <div className="border-t border-border p-4 space-y-3">
-                        <p className="text-sm text-slate-400 md:hidden">{ep.description}</p>
-                        {ep.request && (
-                          <>
-                            <div className="text-[10px] uppercase text-slate-500 tracking-wider">Request Body</div>
-                            <CodeBlock lang="json" code={ep.request} />
-                          </>
-                        )}
-                        {ep.response && (
-                          <>
-                            <div className="text-[10px] uppercase text-slate-500 tracking-wider">Response</div>
-                            <CodeBlock lang="json" code={ep.response} />
-                          </>
-                        )}
-                        <div className="text-[10px] uppercase text-slate-500 tracking-wider mt-4">Examples</div>
-                        <CodeBlock lang="curl" code={curlExample(ep)} />
-                        <CodeBlock lang="javascript" code={jsExample(ep)} />
-                        <CodeBlock lang="python" code={pyExample(ep)} />
-                      </div>
-                    </details>
-                  ))}
-                </div>
-              )}
-            </Panel>
           ))}
         </div>
-
-        <div className="space-y-5">
-          <Panel title="Base URL">
-            <CodeBlock lang="url" code={baseUrl} />
-            <p className="text-xs text-slate-500 mt-3">Self-hosted — this is <strong className="text-white">your</strong> instance URL.</p>
-          </Panel>
-
-          <Panel title="Rate Limits">
-            <div className="space-y-2 text-sm text-slate-400">
-              <div className="bg-background border border-border rounded-lg p-3">
-                <div className="text-white font-medium">Auth endpoints</div>
-                <div className="text-xs mt-1">20 requests / 15 minutes per IP</div>
-              </div>
-              <div className="bg-background border border-border rounded-lg p-3">
-                <div className="text-white font-medium">All other /api routes</div>
-                <div className="text-xs mt-1">300 requests / 60 seconds per IP</div>
-              </div>
-              <p className="text-xs text-slate-600">Returns <code className="text-warning">429 Too Many Requests</code> when exceeded.</p>
-            </div>
-          </Panel>
-
-          <Panel title="Error Format">
-            <CodeBlock lang="json" code={`// All errors return:\n{\n  "error": "Human-readable message"\n}\n\n// Common status codes:\n// 400 Bad Request\n// 401 Unauthorized\n// 404 Not Found\n// 429 Rate Limited\n// 500 Internal Error`} />
-          </Panel>
-
-          <Panel title="Socket.IO Events">
-            <div className="space-y-2 text-xs text-slate-400">
-              <p>Connect to <code className="text-primary">ws://host</code> with <code className="text-slate-300">auth: {'{ token }'}</code>.</p>
-              {[
-                ['qr', 'QR code PNG base64 for a session'],
-                ['session-status', 'Session connected/disconnected events'],
-                ['flow-log', 'Real-time node execution events'],
-              ].map(([ev, desc]) => (
-                <div key={ev} className="bg-background border border-border rounded-lg p-2.5">
-                  <code className="text-amber-400">{ev}</code>
-                  <p className="text-slate-500 mt-0.5">{desc}</p>
-                </div>
-              ))}
-              <CodeBlock lang="javascript" code={`import { io } from "socket.io-client";\nconst sock = io(BASE_URL, { auth: { token } });\nsock.on("flow-log", (log) => console.log(log));`} />
-            </div>
-          </Panel>
-        </div>
-      </div>
+      </Panel>
     </Page>
   );
 };
@@ -1227,17 +1183,23 @@ export const ProvidersPage = () => {
     load();
   };
   return (
-    <Page title="AI Providers" description="Enable providers and configure default models or API keys." icon={Cpu}>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    <Page title="AI Providers" description="Enable providers (OpenAI, Gemini, Claude, DeepSeek, Groq, Ollama) and configure models or API keys." icon={Cpu}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {(data.providers || []).map((provider) => {
           const edit = edits[provider.id] || {};
           return (
             <Panel key={provider.id} title={provider.name}>
               <div className="space-y-3">
-                <div className="flex items-center justify-between"><StatusPill status={provider.enabled ? 'active' : 'disabled'} />{provider.hasApiKey ? <CheckCircle2 className="text-success" size={18} /> : <XCircle className="text-danger" size={18} />}</div>
+                <div className="flex items-center justify-between">
+                  <StatusPill status={provider.enabled ? 'active' : 'disabled'} />
+                  {provider.hasApiKey ? <CheckCircle2 className="text-success" size={18} /> : <XCircle className="text-danger" size={18} />}
+                </div>
                 <Input placeholder={provider.model} value={edit.model ?? provider.model} onChange={(e) => setEdits({ ...edits, [provider.id]: { ...edit, model: e.target.value } })} />
-                <Input type="password" placeholder="API key" value={edit.apiKey || ''} onChange={(e) => setEdits({ ...edits, [provider.id]: { ...edit, apiKey: e.target.value } })} />
-                <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={edit.enabled ?? provider.enabled} onChange={(e) => setEdits({ ...edits, [provider.id]: { ...edit, enabled: e.target.checked } })} /> Enabled</label>
+                <Input type="password" placeholder="API key (leave blank to keep unchanged)" value={edit.apiKey || ''} onChange={(e) => setEdits({ ...edits, [provider.id]: { ...edit, apiKey: e.target.value } })} />
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" checked={edit.enabled ?? provider.enabled} onChange={(e) => setEdits({ ...edits, [provider.id]: { ...edit, enabled: e.target.checked } })} />
+                  Enabled
+                </label>
                 <Button onClick={() => save(provider)}><Save size={16} /> Save</Button>
               </div>
             </Panel>
